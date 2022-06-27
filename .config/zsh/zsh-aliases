@@ -4,7 +4,7 @@
 alias bed='xrandr --output HDMI-0 --mode 4096x2160 --scale 0.5x0.5'
 alias desk='xrandr --output HDMI-0 --mode 4096x2160 --scale 1x1'
 alias yeet='yay -Rns'
-alias PKGList='{ pacman -Qen & pacman -Qem ; } > pkglist.txt'
+alias PKGList='{ pacman -Qen & pacman -Qem ; } > PKGList.txt'
 
 # ssh for kitty terminal
 if [[ $TERM == "xterm-kitty" ]]; then
