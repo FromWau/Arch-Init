@@ -16,9 +16,8 @@ unsetopt BEEP
 autoload -Uz compinit
 zstyle ':completion:*' menu select
 zmodload zsh/complist
-# compinit
 _comp_options+=(globdots)		# Include hidden files.
-
+compinit
 autoload -U up-line-or-beginning-search
 autoload -U down-line-or-beginning-search
 zle -N up-line-or-beginning-search
@@ -37,19 +36,23 @@ zsh_add_file "zsh-prompt"
 
 # Plugins
 zsh_add_plugin "zsh-users/zsh-autosuggestions"
+ZSH_AUTOSUGGEST_STRATEGY=(completion history match_prev_cmd)
+
 zsh_add_plugin "zsh-users/zsh-syntax-highlighting"
+
 zsh_add_plugin "hlissner/zsh-autopair"
 
+
 # KeyBindings
-bindkey  "^[[H"   beginning-of-line
-bindkey  "^[[F"   end-of-line
-bindkey  "^[[3~"  delete-char
-bindkey  ";5C"	  forward-word
-bindkey  ";5D"    backward-word
-bindkey  "5~"     kill-word
+bindkey  "^[[H"     beginning-of-line
+bindkey  "^[[F"     end-of-line
+bindkey  "^[[3~"    delete-char
+bindkey  ";5C"	    forward-word
+bindkey  ";5D"      backward-word
+bindkey  "5~"       kill-word
 bindkey  "\C-h"     backward-kill-word
 
 # Environment variables set everywhere
-export EDITOR="vim"
+export EDITOR="nvim"
 export TERMINAL="kitty"
 export BROWSER="waterfox-g4"
