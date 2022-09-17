@@ -1,9 +1,5 @@
-# Arch-Init
-Setup for multiple systems.\\Switch branch for the different installer scripts and more info.
-
-## Branch archner
-
-## Branch Asus
+# Arch-Init Branch (Asus)
+Setup for Asus systems.\\Run the asus-setup.sh script.
 
 ## Submodul dotfiles
-
+Contains dotfiles
