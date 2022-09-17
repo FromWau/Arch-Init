@@ -1,9 +1,5 @@
-# Arch-Init
-Setup for multiple systems.\\Switch branch for the different installer scripts and more info.
-
-## Branch archner
-
-## Branch Asus
+# Arch-Init (PC)
+Setup for PC.\\Does not have a dedicated installer script yet and the Setup.md is outdated.
 
 ## Submodul dotfiles
-
+Contains dotfiles.
