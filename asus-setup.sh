@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# curl -l https://raw.githubusercontent.com/FromWau/Arch-Init/main/Asus-Zenbook-Btrfs-Luks.sh > Asus-Zenbook-Btrfs-Luks.sh && chmod +x Asus-Zenbook-Btrfs-Luks.sh && ./Asus-Zenbook-Btrfs-Luks.sh
+# curl -l https://raw.githubusercontent.com/FromWau/Arch-Init/Asus/asus-setup.sh > asus-setup.sh && chmod +x asus-setup.sh && ./asus-setup.sh
 
 # abort on error
 set -e
@@ -259,7 +259,6 @@ write "${Green}${CheckMark} Set fastest mirrors for $COUNTRY${Color_Off}"
 
 # install pkgs via pacstrap
 write_rep "${Purple}Installing basic packages via pacstrap${Color_Off}" &&
-#O_LINES=$(pacstrap /mnt base base-devel linux linux-firmware btrfs-progs vim openssh git dialog man intel-ucode grub grub-btrfs efibootmgr networkmanager go | tee /dev/tty | wc -l)
 pacstrap /mnt base base-devel linux linux-firmware btrfs-progs vim openssh git dialog man intel-ucode grub grub-btrfs efibootmgr networkmanager go &&
 write "${Green}${CheckMark} Installed packages${Color_Off}"
 
@@ -279,8 +278,8 @@ write "${Green}${CheckMark} Set timezone to Vienna${Color_Off}"
 # Locale
 write_rep "${Purple}Generating locales...${Color_Off}" &&
 arch-chroot /mnt /bin/bash -c "sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && 
-    locale-gen > /dev/null && 
-    echo 'LANG=en_US.UTF-8' >> /etc/locale.conf" &&
+    locale-gen && 
+    echo 'LANG=en_US.UTF-8' >> /etc/locale.conf" > /dev/null 2>&1 &&
 write "${Green}${CheckMark} Generated locales for en_US.UTF-8${Color_Off}"
 
 
@@ -300,7 +299,7 @@ write "${Purple}Make it bootable...${Color_Off}"
 # Start Grub setup
 ## Grub setup
 write_rep "${Purple}├─ Installing grub...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c 'grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB > /dev/null 2>&1' &&
+arch-chroot /mnt /bin/bash -c 'grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB' > /dev/null 2>&1 &&
 write "${Green}├─ ${CheckMark} Installed grub${Color_Off}"
 
 
@@ -308,7 +307,7 @@ write "${Green}├─ ${CheckMark} Installed grub${Color_Off}"
 write_rep "${Purple}├─ Configuring and running mkinitcpio...${Color_Off}" &&
 arch-chroot /mnt /bin/bash -c "sed -i '/^BINARIES=/ s/()/(btrfs)/i' /etc/mkinitcpio.conf &&
     sed -i '/^HOOKS=/ s/block filesystems/block encrypt filesystems/i' /etc/mkinitcpio.conf &&
-    mkinitcpio -p linux > /dev/null 2>&1" &&
+    mkinitcpio -p linux" > /dev/null 2>&1 &&
 write "${Green}├─ ${CheckMark} Configurated /etc/mkinitcpio.conf${Color_Off}"
 
 
@@ -318,14 +317,13 @@ arch-chroot /mnt <<\EOF > /dev/null 2&>1 &&
 CRYPT_UUID=$(blkid |tr '\n' ' '  |awk '{ sub(/.*\/dev\/nvme0n1p3: /, ""); sub(/TYPE="crypto_LUKS"*.*/, ""); print }' |tr -d '"' |xargs)
 sed -i "/^GRUB_CMDLINE_LINUX_DEFAULT=/ s/\"loglevel=3 quiet\"/\"loglevel=3 quiet cryptdevice=$CRYPT_UUID:cryptroot root=\/dev\/mapper\/cryptroot\"/i" /etc/default/grub
 sed -i "s/GRUB_TIMEOUT=5/GRUB_TIMEOUT=3/g" /etc/default/grub
-exit
 EOF
 write "${Green}├─ ${CheckMark} Configurated /etc/default/grub${Color_Off}"
 
 
 ## generate grub config
 write_rep "${Purple}├─ Generating grub config...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c "grub-mkconfig -o /boot/grub/grub.cfg > /dev/null 2>&1" &&
+arch-chroot /mnt /bin/bash -c "grub-mkconfig -o /boot/grub/grub.cfg" > /dev/null 2>&1 &&
 write "${Green}├─ ${CheckMark} Generated grub config${Color_Off}"
 
 
