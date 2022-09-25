@@ -155,13 +155,11 @@ then
     list+=$(write "${Yellow}├─ ${CheckMark} luks mapper ($CRY_CLOSE) is open -- closed${Color_Off}" | tee /dev/tty)"\n"
 fi
 
-
-# Wipe everything
+## Wipe everything
 shred -fvzn 0 /dev/nvme0n1 2>&1 | while read i; do write_rep "$i"; done && O_LINES=1 &&
 list+=$(write "${Green}├─ ${CheckMark} wiped /dev/nvme0n1${Color_Off}" | tee /dev/tty)"\n" && O_LINES=0 &&
 
-
-# create partitions EFI, BOOT, ROOT
+## create partitions EFI, BOOT, ROOT
 fdisk /dev/nvme0n1 <<EOF > /dev/null 2>&1 &&
 n
 p
@@ -197,8 +195,7 @@ w
 EOF
 list+=$(write "${Green}├─ ${CheckMark} Created partitions${Color_Off}" | tee /dev/tty)"\n"
 
-
-# Create cryptroot
+## Create cryptroot
 cryptsetup luksFormat /dev/nvme0n1p3 <<EOF > /dev/null &&
 $CRYPT_PASS
 EOF
@@ -207,8 +204,7 @@ $CRYPT_PASS
 EOF
 list+=$(write "${Green}├─ ${CheckMark} created cryptsetup and opened device${Color_Off}" | tee /dev/tty)"\n"
 
-
-# Creating filesystems and subvolumes
+## Creating filesystems and subvolumes
 mkfs.vfat /dev/nvme0n1p1 > /dev/null &&
 mkfs.btrfs /dev/nvme0n1p2 -f > /dev/null &&
 mkfs.btrfs /dev/mapper/cryptroot -f > /dev/null &&
@@ -222,8 +218,7 @@ btrfs su cr /mnt/@var > /dev/null &&
 umount /mnt &&
 list+=$(write "${Green}├─ ${CheckMark} created btrfs subvolumes${Color_Off}" | tee /dev/tty)"\n"
 
-
-# Mount EFI, Boot and subvolumes
+## Mount EFI, Boot and subvolumes
 mount -o noatime,compress=zstd,space_cache=v2,discard=async,ssd,subvol=@ /dev/mapper/cryptroot /mnt &&
 mkdir -p /mnt/{home,.snapshots,var,boot} &&
 
@@ -236,8 +231,7 @@ mkdir -p /mnt/boot/efi &&
 mount /dev/nvme0n1p1 /mnt/boot/efi &&
 list+=$(write "${Green}└─ ${CheckMark} Created mount points${Color_Off}" | tee /dev/tty)
 
-
-# Setting Task to done.
+## Setting Task to done.
 O_LINES=$(echo -e "$list" | wc -l) &&
 write "${Green}${CheckMark} Setup Disk${Color_Off}" &&
 O_LINES=0
@@ -265,7 +259,7 @@ write "${Green}${CheckMark} Installed packages${Color_Off}"
 
 # generate fstab
 write_rep "${Purple}Generating fstab...${Color_Off}" &&
-genfstab -U /mnt >> /mnt/etc/fstab &&
+genfstab -U /mnt > /etc/fstab &&
 write "${Green}${CheckMark} Generated fstab${Color_Off}"
  
 
@@ -277,21 +271,21 @@ write "${Green}${CheckMark} Set timezone to Vienna${Color_Off}"
 
 # Locale
 write_rep "${Purple}Generating locales...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c "sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && 
+arch-chroot /mnt /bin/bash -c "sed -i '/en_US.UTF-8/s/^#//g' /etc/locale.gen && 
     locale-gen && 
-    echo 'LANG=en_US.UTF-8' >> /etc/locale.conf" > /dev/null 2>&1 &&
+    echo 'LANG=en_US.UTF-8' > /etc/locale.conf" > /dev/null 2>&1 &&
 write "${Green}${CheckMark} Generated locales for en_US.UTF-8${Color_Off}"
 
 
 # Hostname
 write_rep "${Purple}Setting hostname...${Color_Off}" &&
-echo "arsus" >> /mnt/etc/hostname &&
+echo "arsus" > /mnt/etc/hostname &&
 write "${Green}${CheckMark} Set hostname${Color_Off}"
 
 
 # Hosts
 write_rep "${Purple}Setting hosts...${Color_Off}" &&
-echo -e "127.0.0.1  localhost\n::1        localhost\n127.0.1.1  arsus.local  arsus" >> /mnt/etc/hosts &&
+echo -e "127.0.0.1  localhost\n::1        localhost\n127.0.1.1  arsus.local  arsus" > /mnt/etc/hosts &&
 write "${Green}${CheckMark} Set hosts${Color_Off}"
 
 
@@ -313,7 +307,7 @@ write "${Green}├─ ${CheckMark} Configurated /etc/mkinitcpio.conf${Color_Off}
 
 ## set crypt option in /etc/default/grub
 write_rep "${Purple}├─ Configuring default grub...${Color_Off}" &&
-arch-chroot /mnt <<\EOF > /dev/null 2&>1 &&
+arch-chroot /mnt <<EOF > /dev/null 2&>1 &&
 CRYPT_UUID=$(blkid |tr '\n' ' '  |awk '{ sub(/.*\/dev\/nvme0n1p3: /, ""); sub(/TYPE="crypto_LUKS"*.*/, ""); print }' |tr -d '"' |xargs)
 sed -i "/^GRUB_CMDLINE_LINUX_DEFAULT=/ s/\"loglevel=3 quiet\"/\"loglevel=3 quiet cryptdevice=$CRYPT_UUID:cryptroot root=\/dev\/mapper\/cryptroot\"/i" /etc/default/grub
 sed -i "s/GRUB_TIMEOUT=5/GRUB_TIMEOUT=3/g" /etc/default/grub
