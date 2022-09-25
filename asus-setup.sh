@@ -413,9 +413,9 @@ write "${Green}${CheckMark} Created .zshenv${Color_Off}"
 
 # install dotfiles
 write_rep "${Purple}Installing dotfiles...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c "runuser -l $USER_NAME -c 'git clone https://github.com/FromWau/Arch-Init.git > /dev/null 2>&1 &&
-    cp -r Arch-Init/.config/* /home/$USER_NAME/.config &&
-    rm -rf Arch-Init'" &&
+arch-chroot /mnt /bin/bash -c "runuser -l $USER_NAME -c 'git clone https://github.com/FromWau/dotfiles.git > /dev/null 2>&1 &&
+    cp -r dotfiles/.config/* /home/$USER_NAME/.config &&
+    rm -rf dotfiles'" &&
 write "${Green}${CheckMark} Installed dotfiles${Color_Off}"
 
 
