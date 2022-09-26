@@ -259,7 +259,7 @@ write "${Green}${CheckMark} Installed packages${Color_Off}"
 
 # generate fstab
 write_rep "${Purple}Generating fstab...${Color_Off}" &&
-genfstab -U /mnt > /etc/fstab &&
+genfstab -U /mnt > /mnt/etc/fstab &&
 write "${Green}${CheckMark} Generated fstab${Color_Off}"
  
 
@@ -296,7 +296,6 @@ write_rep "${Purple}├─ Installing grub...${Color_Off}" &&
 arch-chroot /mnt /bin/bash -c 'grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB' > /dev/null 2>&1 &&
 write "${Green}├─ ${CheckMark} Installed grub${Color_Off}"
 
-
 ## crypt 
 write_rep "${Purple}├─ Configuring and running mkinitcpio...${Color_Off}" &&
 arch-chroot /mnt /bin/bash -c "sed -i '/^BINARIES=/ s/()/(btrfs)/i' /etc/mkinitcpio.conf &&
@@ -304,22 +303,17 @@ arch-chroot /mnt /bin/bash -c "sed -i '/^BINARIES=/ s/()/(btrfs)/i' /etc/mkinitc
     mkinitcpio -p linux" > /dev/null 2>&1 &&
 write "${Green}├─ ${CheckMark} Configurated /etc/mkinitcpio.conf${Color_Off}"
 
-
 ## set crypt option in /etc/default/grub
 write_rep "${Purple}├─ Configuring default grub...${Color_Off}" &&
-arch-chroot /mnt <<EOF > /dev/null 2&>1 &&
-CRYPT_UUID=$(blkid |tr '\n' ' '  |awk '{ sub(/.*\/dev\/nvme0n1p3: /, ""); sub(/TYPE="crypto_LUKS"*.*/, ""); print }' |tr -d '"' |xargs)
-sed -i "/^GRUB_CMDLINE_LINUX_DEFAULT=/ s/\"loglevel=3 quiet\"/\"loglevel=3 quiet cryptdevice=$CRYPT_UUID:cryptroot root=\/dev\/mapper\/cryptroot\"/i" /etc/default/grub
-sed -i "s/GRUB_TIMEOUT=5/GRUB_TIMEOUT=3/g" /etc/default/grub
-EOF
+CRYPT_UUID=$(blkid |tr '\n' ' '  |awk '{ sub(/.*\/dev\/nvme0n1p3: /, ""); sub(/TYPE="crypto_LUKS"*.*/, ""); print }' |tr -d '"' |xargs) &&
+sed -i "s/GRUB_TIMEOUT=5/GRUB_TIMEOUT=3/g" /mnt/etc/default/grub &&
+sed -i "/^GRUB_CMDLINE_LINUX_DEFAULT=/ s/\"loglevel=3 quiet\"/\"loglevel=3 quiet cryptdevice=$CRYPT_UUID:cryptroot root=\/dev\/mapper\/cryptroot\"/i" /mnt/etc/default/grub &&
 write "${Green}├─ ${CheckMark} Configurated /etc/default/grub${Color_Off}"
-
 
 ## generate grub config
 write_rep "${Purple}├─ Generating grub config...${Color_Off}" &&
 arch-chroot /mnt /bin/bash -c "grub-mkconfig -o /boot/grub/grub.cfg" > /dev/null 2>&1 &&
 write "${Green}├─ ${CheckMark} Generated grub config${Color_Off}"
-
 
 ## Setup Grub Themes (custom grup)
 write_rep "${Purple}└─ Installing grub2 vimix theme...${Color_Off}" &&
@@ -333,6 +327,7 @@ write "${Green}└─ ${CheckMark} Installed vimix grub2 theme${Color_Off}"
 O_LINES=5
 write "${Green}${CheckMark} Made it bootable${Color_Off}"
 O_LINES=0
+
 
 # update pacman.conf 
 write_rep "${Purple}Updating pacman.conf...${Color_Off}" &&
