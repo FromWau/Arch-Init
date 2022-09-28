@@ -341,7 +341,8 @@ write "${Green}${CheckMark} Updated pacman.conf${Color_Off}"
 write "${Purple}Installing packages...${Color_Off}" &&
 pacstrap /mnt mesa vulkan-intel wayland plasma-wayland-session sddm sddm-kcm plasma-desktop plasma-nm iwd powerdevil \
 dolphin dolphin-plugins kdeplasma-addons kdeconnect kde-gtk-config kscreen kinfocenter firefox \
-bluedevil pulseaudio plasma-pa pulseaudio-bluetooth bluez bluez-utils pulseaudio-alsa alsa-plugins \
+bluedevil pulseaudio plasma-pa pulseaudio-bluetooth bluez bluez-utils pulseaudio-alsa \
+alsa-firmware alsa-ucm-conf sof-firmware alsa-plugins \
 kitty zsh dash neovim nerd-fonts reflector thunderbird discord btop exa procs ripgrep intellij-idea-community-edition jdk-openjdk neofetch tldr && 
 write "${Green}${CheckMark} Installed GPU drivers, KDE, wayland, audio, bluetooth and standart programms${Color_Off}"
 
@@ -408,7 +409,7 @@ arch-chroot /mnt /bin/bash -c "runuser -l $USER_NAME -c 'git clone https://githu
 write "${Green}${CheckMark} Installed dotfiles${Color_Off}"
 
 
-# setup nvim -- not working
+# setup nvim
 write_rep "${Purple}Setting up neovim...${Color_Off}" &&
 arch-chroot /mnt /bin/bash -c "runuser -l $USER_NAME -c 'git clone --depth 1 https://github.com/wbthomason/packer.nvim ~/.local/share/nvim/site/pack/packer/start/packer.nvim > /dev/null 2>&1 &&
     nvim .config/nvim/lua/user/packer.lua --headless +source +PackerSync +qa > /dev/null 2>&1'" &&
@@ -501,7 +502,6 @@ kde setup
 
 ${Red}
 ====== Errors =====================
-neovim +source +PackerSync not working
 ====================================
 
 ${Yellow}
