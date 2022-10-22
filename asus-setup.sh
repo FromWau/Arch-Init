@@ -1,55 +1,260 @@
 #!/bin/sh
 
-# curl -l https://raw.githubusercontent.com/FromWau/Arch-Init/Asus/asus-setup.sh > asus-setup.sh && chmod +x asus-setup.sh && ./asus-setup.sh
-
-# abort on error
-set -e
+# curl -O https://raw.githubusercontent.com/FromWau/Arch-Init/Asus/asus-setup.sh && chmod +x asus-setup.sh && ./asus-setup.sh
 
 
 # Colors
-Purple='\033[0;35m'	  # Purple command not yet done
-Green='\033[0;32m'        # Green for success
-Yellow='\033[0;33m'       # Yellow for warnings
-Red='\033[0;31m'          # Red for errors
-Color_Off='\033[0m'	  # Resets colors 
+Purple='\033[0;35m'	    # Purple process or sub-process still running
+Green='\033[0;32m'      # Green for success
+Yellow='\033[0;33m'     # Yellow for warnings
+Red='\033[0;31m'        # Red for errors
+Color_Off='\033[0m'	    # Resets colors 
 
 # Symbols
-CheckMark='\xE2\x9C\x94'
-Cross='\xE2\x9C\x96'
+CheckMark='✔'
+Cross='✗'
 
-
+# ======================
 # Functions
+# ======================
+
+# asks for swicthing the keyboad layout
+new_keyboardlayout() {
+    printf "Change keyboad layout [N (use current %s)/ ? (list available layouts)/ name of layout]: " "$KEYLAYOUT" &&
+    read -r new_keylayout && 
+    case $new_keylayout in
+        [?]* ) 
+            localectl list-keymaps && 
+            new_keyboardlayout
+            ;;
+    [Nn] | '') 
+            ;;
+           * ) 
+            if localectl list-keymaps | grep -P "^($new_keylayout)$" > /dev/null && localectl set-keymap "$new_keylayout"
+            then
+                KEYLAYOUT=$new_keylayout && 
+                return 
+            else
+                printf "${Yellow}%s\n" "$new_keylayout not found ... try again!${Color_Off}" && 
+                new_keyboardlayout
+            fi
+            ;;
+    esac
+}
+
+
 # Checks if system is connected to the internet
 check_internet() {
-	nc -zw 5 8.8.8.8 443 > /dev/null 2>&1
+    #dig -x 1.1.1.1 443
+    # nc (netcat not installed)
+    nc -zw 5 8.8.8.8 443 > /dev/null 2>&1
 }
 
 # checks if dir is mounted
 is_mounted() {
-    mount |awk -v DIR="$1" '{if ($3 == DIR) { exit 0}} ENDFILE{exit -1}'
+    mount | awk -v DIR="$1" '{ if ($3 == DIR) {exit 0} } ENDFILE{exit -1}'
 }
+
 
 # Writes or overrites via echo
-O_LINES=0
-write() {
-	if [[ "$O_LINES" == 0 ]];
-	then
-		echo -e "$@";
-	elif [[ "$O_LINES" -ge 1 ]];
-	then
-		echo -en "\033[s\033[${O_LINES}A\033[0K$@\033[u";
-		# automaticle set next line number after writing
-		O_LINES="$((O_LINES-1))";
-	fi
+# keep track of to overwriting lines
+task_count=1
+one_line_printf() {
+    printf "\n"
+    while read -r line;
+    do 
+        printf "\033[s\033[1A\033[0K%s\033[u" "$line"; 
+    done
+    printf "\033[s\033[1A\033[0K"
 }
+
+
+Section_Size=45
+section() {
+    if [ "$1" = '--task' ];
+    then
+        task_count=$((task_count+1)) && 
+        shift
+    fi
+
+    word=$*
+    word_size=${#word}
+    x=$((Section_Size-word_size))
+    L=$((x/2))
+    if [ $((x%2)) = "0" ]; 
+    then 
+        R=$L
+    else
+        R=$((L+1))
+    fi
+
+    format=$(printf "%${L}s${Green}%s${Color_Off}%${R}s\n" "" "$word" "" | awk 'match($0,/^( *)(.*[^ ])(.*)/,a){$0=gensub(/ /,"=","g",a[1]) a[2] gensub(/ /,"=","g",a[3])} 1'  )
+    printf "%s\n" "$format"
+}
+
+
+# runs a programm and prints the output, just meant to show a table like lsblk to user
+cmd_length=0
+run() {
+    eval " $1"
+    cmd_length=$( $1 | wc -l )
+}
+
+# clean all lines to current printing line, use with run 
+line_cleaner() {
+    case $1 in
+        '--task')
+            l=$((task_count-1))
+            task_count=1
+            ;;
+        *)
+            l=$cmd_length
+            cmd_length=0
+            ;;
+    esac
+
+    rows=$l
+    # clean all lines under cursor
+    while [ "$rows" -gt "0" ];
+    do
+        printf "\033[s\033[%sA\033[0K\033[u" "$rows"
+        rows=$((rows-1))
+    done
+    
+    # set cursor to top position
+    printf "\033[s\033[%sA\033[0K" "$l"
+}
+
 
 # text that gets overwritten
-write_rep() {
-	write "$@";
-	O_LINES="$((O_LINES+1))"
+task() {
+    task_count=$((task_count+1)) &&
+    printf "%s\n" "$1" &&
+    case "$3" in
+        '-1')
+            eval " $2" 2>&1 | one_line_printf
+            ;;
+           *)
+            eval " $2" > /dev/null 2>&1
+            ;;
+    esac
 }
 
 
+# prompt in wrong line and not encoded
+task_read() {
+	printf "%s" "$@" &&
+    read -r input &&
+    task_count="$((task_count+1))"
+}
+
+task_done() {
+    printf "\033[s\033[1A\033[0K%s\033[u" "$@"
+}
+
+task_failed() {
+    printf "%s\n" "$@"
+    exit 1
+}
+
+tasks_done() {
+    printf "\033[s\033[%sA\033[0K%s\033[u" "$task_count" "$@" &&
+    task_count=1
+}
+
+
+# just for debug
+test_command() {
+    for i in 1 2 3
+    do
+        printf "task %s done...\n" "$i" && sleep 1
+    done
+}
+
+
+debug_text() {
+
+    run "lsblk"
+    line_cleaner
+
+    
+    printf "Tasks running\n"
+    
+
+    if task "0) test" "sleep 1" 
+    then
+        task_done "0) TASK DONE"
+    else
+        task_failed "0) TASK failed"
+    fi
+
+
+    if task "1) Counting to 3" "test_command" "-1"
+    then
+        task_done "1) TASK DONE"
+    else
+        task_failed "1) TASK failed"
+    fi
+
+    if task "2) Count again but no output" "test_command"
+    then 
+        task_done "2) TASK DONE"
+    else
+        task_failed "2) TASK failed"
+    fi
+
+    tasks_done "ALL TASKS DONE"
+    printf "===================\n"
+
+    printf "Tasks reading\n"
+    task_read "Prompt: "
+    
+    if task "Doing stuff with $input" "sleep 1"
+    then
+        task_done "Read TASK DONE"
+    else
+        task_failed "Read TASK failed"
+    fi
+    tasks_done "ALL TASKS DONE"
+    printf "=== DONE ===\n"
+
+    exit 0
+}
+
+
+
+
+
+#TODO add direct color output to tasks
+
+# Lets start ======================================================================================
+printf "${Green}%s\n${Color_Off}" "
+    _             _          ___       _ _   
+   / \   _ __ ___| |__      |_ _|_ __ (_) |_ 
+  / _ \ | '__/ __| '_ \ _____| || '_ \| | __|
+ / ___ \| | | (__| | | |_____| || | | | | |_ 
+/_/   \_\_|  \___|_| |_|    |___|_| |_|_|\__|
+=============================================    
+"
+
+# TODO Some intro stuff idk yet.
+
+
+# setting en if keyboad layout is n/a
+KEYLAYOUT=$( localectl status | awk -F 'VC Keymap:' '{print $2}' | xargs )
+if [ "$KEYLAYOUT" = "n/a" ];
+then
+    KEYLAYOUT='en'
+    localectl set-keymap $KEYLAYOUT
+fi
+
+
+# read Settings
+new_keyboardlayout
+printf "${Green}${CheckMark} Keyboard layout set to %s${Color_Off}\n" "${KEYLAYOUT}"
+
+
+# checking for internet
 has_internet=true
 if ! check_internet;
 then
@@ -57,43 +262,93 @@ then
 fi
 
 
-# set keyboard to german (comment for us)
-write_rep "${Purple}Setting keyboard to de-latin1...${Color_Off}"
-localectl set-keymap de-latin1 &&
-write "${Green}${CheckMark} Keyboard layout set to de-latin1${Color_Off}"
-
-
-# read settings 
-if ! $has_internet;
-then		
-	O_LINES=$(iwctl station wlan0 get-networks | tee /dev/tty | wc -l)
-	read -p 'WLAN SSID: ' WLAN_SSID
-	read -p 'WLAN PASS: ' WLAN_PASS
+# Set Settings
+section --task "= Some questions "
+if ! "$has_internet";
+then
+    task_read 'WLAN SSID: ' && WLAN_SSID=$input
+    task_read 'WLAN PASS: ' && WLAN_PASS=$input
 fi
-read -p 'Country [eg: AT / Austria]: ' COUNTRY
-read -p 'CRYPT PASS: ' CRYPT_PASS
-read -p 'ROOT PASS: ' ROOT_PASS
-read -p 'USER NAME: ' USER_NAME
-read -p 'USER PASS: ' USER_PASS
+
+task_read 'CRYPT PASS: ' && CRYPT_PASS=$input
+task_read 'ROOT PASS: ' && ROOT_PASS=$input
+task_read 'USER NAME: ' && USER_NAME=$input
+task_read 'USER PASS: ' && USER_PASS=$input
+
+line_cleaner --task
 
 
 # Making sure everything is good to go
+section " Settings Summary "
+
 if ! $has_internet;
 then
-	O_LINES="$((O_LINES+7))";
-	write "======================  ${Green}Settings${Color_Off}  ======================"
-	write "WLAN SSID:           ${WLAN_SSID}"
-	write "WLAN password:       ${WLAN_PASS}"
+    printf "WLAN SSID: %34s\n" "${WLAN_SSID}"
+	printf "WLAN password: %30s\n" "${WLAN_PASS}"
+fi
+printf "Keyboard layout: %28s\n" "${KEYLAYOUT}"
+printf "Crypt password: %29s\n" "${CRYPT_PASS}"                                                                    
+printf "Root password: %30s\n" "${ROOT_PASS}"                                                                     
+printf "User name: %34s\n" " ${USER_NAME}"                                                                     
+printf "User password: %30s\n" "${USER_PASS}"
+
+
+
+
+# TODO
+# Keymap and check_internet should be tasked and get cleared
+
+exit 0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#IP=$(dig +short myip.opendns.com @resolver1.opendns.com)
+#TIMEZONE=$(curl -s ipinfo.io/${IP} | jq .timezone)
+
+
+# get all disks that are not hotplugable (no usb or sd card)
+disks=$(lsblk -o type,path,hotplug | awk '$1 == "disk" && $3 == 0 { print $2 }')
+filesystem='btrfs'
+
+
+
+if [ $( echo "$disks" | wc -l ) -eq "1" ]; then
+    echo "1 -- skip frage"
+    DISK=$disks
+elif [ $( echo "$disks" | wc -l ) -gt "1" ]; then
+    echo "$disks" | awk '{ print NR ") "$s }'
+    read -p "Choose one disk: " input_disk
+    DISK=$( echo "$disks" | sed -n ${input_disk}p )
 else
-	O_LINES=5;
-	write "======================  ${Green}Settings${Color_Off}  ======================"
+    echo "WTF no available disks or all are hotplug" 
+    exit 1
 fi
 
-write "Country:             ${COUNTRY}"                                                         
-write "Crypt password:      ${CRYPT_PASS}"                                                                    
-write "Root password:       ${ROOT_PASS}"                                                                     
-write "User name:           ${USER_NAME}"                                                                     
-write "User password:       ${USER_PASS}\n"
+echo $DISK
+
+# bonus stuff: search if another filesystems or boot /efi is already here. maybe look into fstab
+
+
+# partition disk normal 
+
+
+
+
+
 write "====================  ${Green}Disk Layout${Color_Off}  ====================="
 write "nvme0n1       259:0    0 476.9G  0 disk"                                                              
 write "├─nvme0n1p1   259:1    0   256M  0 part  /mnt/boot/efi"                                                  
@@ -247,13 +502,13 @@ write "${Green}${CheckMark} Configured /etc/pacman.conf${Color_Off}"
 
 # reflector
 write_rep "${Purple}Updating pacman.d/mirrorlist${Color_Off}" &&
-reflector -c $COUNTRY -a 15 --sort rate --save /etc/pacman.d/mirrorlist > /dev/null 2>&1 &&
+reflector -a 15 --sort rate --save /etc/pacman.d/mirrorlist > /dev/null 2>&1 &&
 write "${Green}${CheckMark} Set fastest mirrors for $COUNTRY${Color_Off}"
 
 
 # install pkgs via pacstrap
 write_rep "${Purple}Installing basic packages via pacstrap${Color_Off}" &&
-pacstrap /mnt base base-devel linux linux-firmware btrfs-progs vim openssh git dialog man intel-ucode grub grub-btrfs efibootmgr networkmanager go &&
+pacstrap /mnt base base-devel linux linux-firmware btrfs-progs vim openssh git dialog jq man intel-ucode grub grub-btrfs efibootmgr networkmanager go &&
 write "${Green}${CheckMark} Installed packages${Color_Off}"
 
 
@@ -391,7 +646,7 @@ arch-chroot /mnt /bin/bash -c "runuser -l $USER_NAME -c 'git clone https://aur.a
     cd ~/yay-git &&
     makepkg -si --noconfirm > /dev/null 2>&1 &&
     rm -rf ~/yay-git &&
-    yay -Syyyu timeshift spotify touchegg tmux wl-clipboard --noconfirm'" &&
+    yay -Syyyu timeshift spotify touchegg tmux wl-clipboard --noconfirm --removemake'" &&
 write "${Green}${CheckMark} Installed yay and aur packages${Color_Off}"
 
 
