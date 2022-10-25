@@ -13,40 +13,15 @@ Color_Off='\033[0m'	    # Resets colors
 # Symbols
 CheckMark='✔'
 Cross='✗'
+Star=''
 
 # ======================
 # Functions
 # ======================
 
-# asks for swicthing the keyboad layout
-new_keyboardlayout() {
-    printf "Change keyboad layout [N (use current %s)/ ? (list available layouts)/ name of layout]: " "$KEYLAYOUT" &&
-    read -r new_keylayout && 
-    case $new_keylayout in
-        [?]* ) 
-            localectl list-keymaps && 
-            new_keyboardlayout
-            ;;
-    [Nn] | '') 
-            ;;
-           * ) 
-            if localectl list-keymaps | grep -P "^($new_keylayout)$" > /dev/null && localectl set-keymap "$new_keylayout"
-            then
-                KEYLAYOUT=$new_keylayout && 
-                return 
-            else
-                printf "${Yellow}%s\n" "$new_keylayout not found ... try again!${Color_Off}" && 
-                new_keyboardlayout
-            fi
-            ;;
-    esac
-}
-
 
 # Checks if system is connected to the internet
 check_internet() {
-    #dig -x 1.1.1.1 443
-    # nc (netcat not installed)
     nc -zw 5 8.8.8.8 443 > /dev/null 2>&1
 }
 
@@ -61,44 +36,113 @@ is_mounted() {
 task_count=1
 one_line_printf() {
     printf "\n"
-    while read -r line;
+    while read -r line
     do 
-        printf "\033[s\033[1A\033[0K%s\033[u" "$line"; 
+        printf "\033[s\033[1A\033[0K%s\033[u" "$line"
     done
     printf "\033[s\033[1A\033[0K"
 }
 
 
-Section_Size=45
+Section_Size=43
 section() {
-    if [ "$1" = '--task' ];
+    if [ "$1" = '--task' ]
     then
         task_count=$((task_count+1)) && 
         shift
     fi
 
-    word=$*
+    word=$1
     word_size=${#word}
     x=$((Section_Size-word_size))
     L=$((x/2))
-    if [ $((x%2)) = "0" ]; 
+    if [ $((x%2)) = "0" ]
     then 
         R=$L
     else
         R=$((L+1))
     fi
+    shift
+    
+    if [ "$1" = '-' ]
+    then
+        format=$(printf "%${L}s${Green}%s${Color_Off}%${R}s\n" "" " $word " "" | awk 'match($0,/^( *)(.*[^ ])(.*)/,a){$0=gensub(/ /,"-","g",a[1]) a[2] gensub(/ /,"-","g",a[3])} 1'  )
+    else
+        format=$(printf "%${L}s${Green}%s${Color_Off}%${R}s\n" "" " $word " "" | awk 'match($0,/^( *)(.*[^ ])(.*)/,a){$0=gensub(/ /,"=","g",a[1]) a[2] gensub(/ /,"=","g",a[3])} 1'  )
+    fi
 
-    format=$(printf "%${L}s${Green}%s${Color_Off}%${R}s\n" "" "$word" "" | awk 'match($0,/^( *)(.*[^ ])(.*)/,a){$0=gensub(/ /,"=","g",a[1]) a[2] gensub(/ /,"=","g",a[3])} 1'  )
     printf "%s\n" "$format"
 }
+
 
 
 # runs a programm and prints the output, just meant to show a table like lsblk to user
 cmd_length=0
 run() {
-    eval " $1"
-    cmd_length=$( $1 | wc -l )
+    out=$( eval " $1" 2>&1 | tee /dev/tty )
+    cmd_length=$( echo "$out" | wc -l )
 }
+
+
+# asks for swicthing the keyboad layout
+new_keyboardlayout() {
+    printf "Change keyboad layout [N (use current %s)/ ? (list available layouts)/ name of layout]: " "$KEYLAYOUT"
+    read -r new_keylayout
+    
+    cmd_length=$((cmd_length+1))
+    case $new_keylayout in
+        [?]* ) 
+            localectl list-keymaps | less && 
+            new_keyboardlayout
+            ;;
+    [Nn] | '') 
+            ;;
+           * ) 
+            kb="$(localectl list-keymaps | grep -P "^($new_keylayout)$")" > /dev/null 2>&1
+            if [ "$(echo "$kb" | wc -l)" -eq "1" ] && localectl set-keymap "$new_keylayout"
+            then
+                KEYLAYOUT=$new_keylayout &&
+                return 
+            else
+                printf "${Yellow}%s${Color_Off}\n" "$new_keylayout not found ... try again!" &&
+                cmd_length=$((cmd_length+1)) &&
+                new_keyboardlayout
+            fi
+            ;;
+    esac
+}
+
+
+
+# not accepting coorect answer
+new_timezone() {
+    printf "Change timezone [N (use current %s)/ ? (list timezones)/ timezone]: " "$TIMEZONE"
+    read -r new_tz
+    
+    cmd_length=$((cmd_length+1))
+    case $new_tz in
+        [?]* )
+            timedatectl list-timezones | less &&
+            new_timezone
+            ;;
+        [Nn] | '')
+            ;;
+        *)
+            tz="$( timedatectl list-timezones | grep -P "^($new_tz)" )" > /dev/null 2>&1
+            if [ "$(echo "$tz" | wc -l)" -eq '1' ] && timedatectl set-timezone "$new_tz"
+            then
+                TIMEZONE=$tz
+                return 
+            else
+                printf "${Yellow}%s${Color_Off}\n" "$new_tz not found ... try again!" &&
+                cmd_length=$((cmd_length+1)) &&
+                new_timezone
+            fi
+            ;;
+    esac
+}
+
+
 
 # clean all lines to current printing line, use with run 
 line_cleaner() {
@@ -115,7 +159,7 @@ line_cleaner() {
 
     rows=$l
     # clean all lines under cursor
-    while [ "$rows" -gt "0" ];
+    while [ "$rows" -gt "0" ]
     do
         printf "\033[s\033[%sA\033[0K\033[u" "$rows"
         rows=$((rows-1))
@@ -129,7 +173,7 @@ line_cleaner() {
 # text that gets overwritten
 task() {
     task_count=$((task_count+1)) &&
-    printf "%s\n" "$1" &&
+    printf "${Purple}${Star} %s${Color_Off}\n" "$1" &&
     case "$3" in
         '-1')
             eval " $2" 2>&1 | one_line_printf
@@ -140,6 +184,19 @@ task() {
     esac
 }
 
+# Same as normal task but Yellow text
+task_warning() {
+    task_count=$((task_count+1)) &&
+    printf "${Yellow}${CheckMark} %s${Color_Off}\n" "$1" &&
+    case "$3" in
+        '-1')
+            eval " $2" 2>&1 | one_line_printf
+            ;;
+           *)
+            eval " $2" > /dev/null 2>&1
+            ;;
+    esac
+}
 
 # prompt in wrong line and not encoded
 task_read() {
@@ -149,83 +206,28 @@ task_read() {
 }
 
 task_done() {
-    printf "\033[s\033[1A\033[0K%s\033[u" "$@"
+    printf "${Green}\033[s\033[1A\033[0K${CheckMark} %s\033[u${Color_Off}" "$@"
 }
 
 task_failed() {
-    printf "%s\n" "$@"
+    printf "${Red}${Cross} %s${Color_Off}" "$@"
     exit 1
 }
 
 tasks_done() {
-    printf "\033[s\033[%sA\033[0K%s\033[u" "$task_count" "$@" &&
+    printf "${Green}\033[s\033[%sA\033[0K${CheckMark} %s\033[u${Color_Off}" "$task_count" "$@" &&
+    task_count=1
+}
+
+header() {
+    printf "${Purple}${Star} %s${Color_Off}\n" "$1"
     task_count=1
 }
 
 
-# just for debug
-test_command() {
-    for i in 1 2 3
-    do
-        printf "task %s done...\n" "$i" && sleep 1
-    done
-}
-
-
-debug_text() {
-
-    run "lsblk"
-    line_cleaner
-
-    
-    printf "Tasks running\n"
-    
-
-    if task "0) test" "sleep 1" 
-    then
-        task_done "0) TASK DONE"
-    else
-        task_failed "0) TASK failed"
-    fi
-
-
-    if task "1) Counting to 3" "test_command" "-1"
-    then
-        task_done "1) TASK DONE"
-    else
-        task_failed "1) TASK failed"
-    fi
-
-    if task "2) Count again but no output" "test_command"
-    then 
-        task_done "2) TASK DONE"
-    else
-        task_failed "2) TASK failed"
-    fi
-
-    tasks_done "ALL TASKS DONE"
-    printf "===================\n"
-
-    printf "Tasks reading\n"
-    task_read "Prompt: "
-    
-    if task "Doing stuff with $input" "sleep 1"
-    then
-        task_done "Read TASK DONE"
-    else
-        task_failed "Read TASK failed"
-    fi
-    tasks_done "ALL TASKS DONE"
-    printf "=== DONE ===\n"
-
-    exit 0
-}
 
 
 
-
-
-#TODO add direct color output to tasks
 
 # Lets start ======================================================================================
 printf "${Green}%s\n${Color_Off}" "
@@ -242,369 +244,705 @@ printf "${Green}%s\n${Color_Off}" "
 
 # setting en if keyboad layout is n/a
 KEYLAYOUT=$( localectl status | awk -F 'VC Keymap:' '{print $2}' | xargs )
-if [ "$KEYLAYOUT" = "n/a" ];
+if [ "$KEYLAYOUT" = "n/a" ]
 then
     KEYLAYOUT='en'
     localectl set-keymap $KEYLAYOUT
 fi
 
 
-# read Settings
-new_keyboardlayout
-printf "${Green}${CheckMark} Keyboard layout set to %s${Color_Off}\n" "${KEYLAYOUT}"
+if task 'Set keyboard layout' && new_keyboardlayout && line_cleaner
+then
+    task_done "Keyboard layout set to ${KEYLAYOUT}"
+else
+    task_failed "Failed setting keyboard to ${KEYLAYOUT}"
+fi
 
 
 # checking for internet
 has_internet=true
-if ! check_internet;
+if ! check_internet
 then
 	has_internet=false
 fi
 
 
 # Set Settings
-section --task "= Some questions "
+section --task "Installer settings"
 if ! "$has_internet";
 then
     task_read 'WLAN SSID: ' && WLAN_SSID=$input
     task_read 'WLAN PASS: ' && WLAN_PASS=$input
 fi
+CRYPT_WANT='0'
+task_read 'Encrypt disk? [Y/n] '
+case $input in
+  [Nn]* ) 
+    CRYPT_WANT='1'
+    ;;
+  [Yy]* | '')
+    task_read 'CRYPT PASS: ' && CRYPT_PASS=$input
+    ;;
+    * ) ;;
+esac
 
-task_read 'CRYPT PASS: ' && CRYPT_PASS=$input
 task_read 'ROOT PASS: ' && ROOT_PASS=$input
 task_read 'USER NAME: ' && USER_NAME=$input
 task_read 'USER PASS: ' && USER_PASS=$input
+task_read 'Country (for faster mirrors/ blank for None): ' && COUNTRY=$input
 
+TIMEZONE='Europe/Vienna'
+new_timezone
+
+task_read 'Locale [Default en_US.UTF-8]: '
+case $input in
+    '' ) 
+        LOCALE='en_US.UTF-8'
+        ;;
+    * )
+        LOCALE="$input"
+        ;;
+esac
+
+task_read 'Host name: ' && HOST=$input
+
+
+
+
+# get all disks that are not hotplugable (no usb or sd card)
+disks=$(lsblk -o type,path,hotplug | awk '$1 == "disk" && $3 == 0 { print $2 }')
+
+if [ "$( echo "$disks" | wc -l )" -eq "1" ]
+then
+    DISK=$disks
+elif [ "$( echo "$disks" | wc -l )" -gt "1" ]
+then
+    prompt=$( echo "$disks" | awk '{ print NR ") "$s }')
+    task "$prompt"
+    cmd_length=$((cmd_length + $(echo "$prompt" | wc -l) ))
+
+    task_read "Choose one disk: "
+    DISK="$( echo "$disks" | sed -n "${input}"p )"
+else
+    task_failed "WTF no available disks or all are hotplug" 
+    exit 1
+fi
+
+
+# Get the filesystem
+filesystems="btrfs lvm2"
+filesystems=$(echo "$filesystems" | sed "s/ /\\n/g")
+
+if [ "$( echo "$filesystems" | wc -l )" -eq "1" ] 
+then
+    FILESYSTEM=$filesystems
+elif [ "$( echo "$filesystems" | wc -l )" -gt "1" ] 
+then
+    echo "Select a filesystem: "
+    prompt="$(echo "$filesystems" | sed "s/ /\\n/g" | awk '{ print NR ") "$s }')"
+    echo "$prompt"
+    cmd_length=$((cmd_length + $(echo "$prompt" | wc -l) + 1))
+
+    task_read "Choose one filesystem: "
+    FILESYSTEM="$( echo "$filesystems" | sed "s/ /\\n/g" | sed -n "${input}"p )"
+else
+    task_failed "WTF no available filesystem in $filesystems" 
+    exit 1
+fi
+
+
+bootls="GRUB Systemd"
+bootls=$( echo "$bootls" | sed "s/ /\\n/g" )
+
+if [ "$( echo "$bootls" | wc -l )" -eq "1" ]
+then
+    BOOTLOADER=$bootls
+elif [ "$( echo "$bootls" | wc -l )" -gt "1" ]
+then
+    echo "Select a bootloader: "
+    prompt="$(echo "$bootls" | sed "s/ /\\n/g" | awk '{ print NR ") "$s }')"
+    echo "$prompt"
+    cmd_length=$((cmd_length + $(echo "$prompt" | wc -l) + 1))
+
+    task_read "Choose one Bootloader: "
+    BOOTLOADER="$( echo "$bootls" | sed "s/ /\\n/g" | sed -n "${input}"p )"
+else
+    task_failed "WTF no available bootloaders for $bootls"
+fi
+
+
+#CPU
+cpus="AMD Intel"
+cpus=$( echo "$cpus" | sed "s/ /\\n/g" )
+
+prompt="$(echo "$cpus" | sed "s/ /\\n/g" | awk '{ print NR ") "$s }')"
+echo "$prompt"
+cmd_length=$((cmd_length + $(echo "$prompt" | wc -l) ))
+
+task_read "Choose one CPU: "
+CPU="$( echo "$cpus" | sed "s/ /\\n/g" | sed -n "${input}"p )"
+
+
+#GPU
+gpus="AMD Intel Nvidia"
+gpus=$( echo "$gpus" | sed "s/ /\\n/g" )
+
+prompt="$(echo "$gpus" | sed "s/ /\\n/g" | awk '{ print NR ") "$s }')"
+echo "$prompt"
+cmd_length=$((cmd_length + $(echo "$prompt" | wc -l) ))
+
+task_read "Choose one GPU: "
+GPU="$( echo "$gpus" | sed "s/ /\\n/g" | sed -n "${input}"p )"
+
+
+
+
+enviroments="KDE awesome none"
+enviroments=$( echo "$enviroments" | sed "s/ /\\n/g" )
+
+prompt="$(echo "$enviroments" | sed "s/ /\\n/g" | awk '{ print NR ") "$s }')"
+echo "$prompt"
+cmd_length=$((cmd_length + $(echo "$prompt" | wc -l) ))
+
+task_read "Choose one enviroment: "
+ENVIROMENT="$( echo "$enviroments" | sed "s/ /\\n/g" | sed -n "${input}"p )"
+
+
+
+line_cleaner
 line_cleaner --task
 
 
+
 # Making sure everything is good to go
-section " Settings Summary "
+section "Settings Summary"
+
 
 if ! $has_internet;
 then
+    section "Network Settings" '-'
     printf "WLAN SSID: %34s\n" "${WLAN_SSID}"
 	printf "WLAN password: %30s\n" "${WLAN_PASS}"
 fi
+section "Locale" '-'
 printf "Keyboard layout: %28s\n" "${KEYLAYOUT}"
-printf "Crypt password: %29s\n" "${CRYPT_PASS}"                                                                    
+if [ "$COUNTRY" ]
+then
+    printf "Country: %36s\n" "${COUNTRY}"
+fi
+printf "Timezone: %35s\n" "${TIMEZONE}"
+printf "Locale: %37s\n" "${LOCALE}"
+
+section "System" '-'
+printf "Host name: %34s\n" "${HOST}"
+printf "Enviroment: %33s\n" "${ENVIROMENT}"
+
+section "User/passwd" '-'
+if [ "$CRYPT_WANT" ]
+then
+    printf "Crypt password: %29s\n" "${CRYPT_PASS}"
+fi
 printf "Root password: %30s\n" "${ROOT_PASS}"                                                                     
 printf "User name: %34s\n" " ${USER_NAME}"                                                                     
 printf "User password: %30s\n" "${USER_PASS}"
+
+section "Disk/partitions" '-'
+printf "Disk for the system: %24s\n" "${DISK}"
+printf "Filesystem: %33s\n" "${FILESYSTEM}"
+printf "Bootloader: %33s\n" "${BOOTLOADER}"
+
+printf "CPU: %40s\n" "$CPU"
+printf "GPU: %40s\n" "$GPU"
+
+
+
+
+
+# has Touchpad
+# cat /proc/bus/input/devices | grep 'Touchpad'
+
+# has battery
+# cat /sys/class/power_supply/BAT0/capacity
+
+
+
+# bonus stuff: search if another filesystems or boot /efi is already here. maybe look into fstab
+
+
+section "Partition Table" '-'
+if [ $CRYPT_WANT ]
+then
+    # Format disk with crypt
+    printf "nvme0n1       disk\n"                                                              
+    printf "├─nvme0n1p1   part  /mnt/boot/efi\n"                                                  
+    printf "├─nvme0n1p2   part  /mnt/boot\n"                                                
+    printf "└─nvme0n1p3   part\n"                                                           
+    printf "  └─cryptroot crypt /mnt/var\n"                                                
+    printf "                    /mnt/.snapshots\n"                                            
+    printf "                    /mnt/home\n"                                                  
+    printf "                    /mnt\n"
+else
+    # Format without crypt
+    printf "nvme0n1       disk\n"                                                              
+    printf "├─nvme0n1p1   part  /mnt/boot/efi\n"                                                  
+    printf "├─nvme0n1p2   part  /mnt/boot\n"                                                
+    printf "└─nvme0n1p3   part\n"
+    
+    printf "NOT yet implemented/n"
+fi
+echo ''
+
+printf "Everything correct and ready to go? [Y/n] "
+read -r input
+case $input in
+  [Nn]* ) exit 0;;
+      * ) ;;
+esac
+
+
+echo ''
+section "Lets go"
+
+
+
+# TODO check if its work and clears correctly
+# Connecting and checking for network connectivity
+if ! $has_internet 
+then
+    	task "Setting Internet..." &&
+    	echo "[Security]" > /var/lib/iwd/"$WLAN_SSID".psk &&
+    	wpa_passphrase "$WLAN_SSID" "$WLAN_PASS" | grep psk |sed 's/#psk=/Passphrase=/g' \
+        	|sed 's/[[:space:]]//g' |sed 's/psk=/PreSharedKey=/g' >> /var/lib/iwd/"$WLAN_SSID".psk && 
+	
+    	iwctl station wlan0 disconnect && iwctl station wlan0 connect "$WLAN_SSID" > /dev/null 2>&1 && sleep 10
+	
+	if check_internet;
+	then
+        	task_done "Internet connected via iwctl" && has_internet=true
+	else
+        	task_failed "No Internet - is the ssid or password correct?" && exit 1
+	fi
+fi
+
+
+
+# Enable the NTP service
+if task "Enabling NTP service..." "timedatectl set-ntp true"
+then
+    task_done "Enabled NTP service"
+else
+    task_failed "Failed Enabling" 
+fi
+
+
+if [ $CRYPT_WANT ]
+then
+
+    # Disk Setup
+    header "Start disk setup..."
+
+    ## Check is everything dismounted and crypt closed
+    DIR=/mnt
+    if is_mounted $DIR
+    then
+        if task_warning "├─ $DIR is mounted! -- trying unmounting" "umount -R $DIR"
+        then
+            task_done "├─ unmounted $DIR"
+        else
+            task_failed "├─ failed unmounting $DIR "
+        fi
+    fi
+
+
+    CRY_CLOSE=$(dmsetup ls |grep crypt |cut -f1)
+    if [ -n "$CRY_CLOSE" ]
+    then
+        if task_warning "├─ luks mapper ($CRY_CLOSE) is open -- trying closing" "cryptsetup close /dev/mapper/$CRY_CLOSE"
+        then
+            task_done "├─ closed $CRY_CLOSE"
+        else
+            task_failed "├─ failed closing $CRY_CLOSE"
+        fi
+    fi
+
+
+    ## Wipe everything
+    if task "Start wiping $DISK (this will take a few minutes)" "shred -fvzn 0 $DISK 2>&1" "-1" 
+    then
+        task_done "├─ Wiped $DISK"
+    else
+        task_failed "├─ failed wiping $DISK"
+    fi
+
+
+    ## create partitions EFI, BOOT, ROOT
+    if task "├─ Start partitioning $DISK" "fdisk /dev/nvme0n1 <<EOF > /dev/null 2>&1
+    n
+    p
+    1
+
+    +256M
+
+    n
+    p
+    2
+
+    +512M
+
+    n
+    p
+    3
+
+
+
+    t
+    1
+    EF
+
+    t
+    2
+    83
+
+    t
+    3
+    83
+
+    w
+    EOF"
+    then
+        task_done "├─ Partitions created"
+    else
+        task_failed "├─ Partitioning failed"
+    fi
+
+
+    PART_EFI="${DISK}p1"
+    PART_BOOT="${DISK}p2"
+    PART_ROOT="${DISK}p3"
+
+    ## Create cryptroot and open it 
+    if task "├─ Start encrypting $PART_ROOT" &&
+        printf "%s" "$CRYPT_PASS" | cryptsetup luksFormat "$PART_ROOT" - &&
+        printf "%s" "$CRYPT_PASS" | cryptsetup luksOpen "$PART_ROOT" cryptroot -
+    then
+        task_done "├─ Encrypted and opened $PART_ROOT"
+    else
+        task_failed "├─ Failed encrypting $PART_ROOT"
+    fi
+
+
+    ## Creating filesystems and subvolumes
+    if task "├─ Create filesystems for partitions and create subvolumes" && 
+        mkfs.vfat "$PART_EFI" > /dev/null &&
+        mkfs.btrfs "$PART_BOOT" -f > /dev/null &&
+        mkfs.btrfs /dev/mapper/cryptroot -f > /dev/null &&
+        mount /dev/mapper/cryptroot /mnt &&
+        btrfs su cr /mnt/@ > /dev/null &&
+        btrfs su cr /mnt/@home > /dev/null &&
+        btrfs su cr /mnt/@snapshots > /dev/null &&
+        btrfs su cr /mnt/@var > /dev/null &&
+        umount /mnt
+    then
+        task_done "├─ Created filesystems for partitions and subvolumes"
+    else
+        task_failed "├─ Failed creating filesystem for partitions and subvolumes"
+    fi
+
+
+    ## Mount EFI, Boot and subvolumes
+    if task "└─ Mount EFI, boot and subvolumes" && 
+        mount -o noatime,compress=zstd,space_cache=v2,discard=async,ssd,subvol=@ /dev/mapper/cryptroot /mnt &&
+        mkdir -p /mnt/home &&
+        mkdir -p /mnt/.snapshots &&
+        mkdir -p /mnt/var &&
+        mkdir -p /mnt/boot &&
+        mount -o noatime,compress=zstd,space_cache=v2,discard=async,ssd,subvol=@home /dev/mapper/cryptroot /mnt/home &&
+        mount -o noatime,compress=zstd,space_cache=v2,discard=async,ssd,subvol=@snapshots /dev/mapper/cryptroot /mnt/.snapshots &&
+        mount -o noatime,compress=zstd,space_cache=v2,discard=async,ssd,subvol=@var /dev/mapper/cryptroot /mnt/var &&
+        mount -o noatime,compress=zstd,space_cache=v2,discard=async,ssd "$PART_BOOT" /mnt/boot &&
+        mkdir -p /mnt/boot/efi &&
+        mount "$PART_EFI" /mnt/boot/efi
+    then
+        task_done "└─ Mounted EFI, boot and subvolumes"
+    else
+        task_failed "└─ Failed mounting EFI, boot and subvolumes"
+    fi
+
+
+    ## Setting Task to done.
+    tasks_done "Successfully setup $DISK"
+
+fi
+
+
+
+# Configure pacman, set mirrorlist and install needed pkgs
+if task "Update pacman.conf" &&
+    sed -i "/\[multilib\]/,/Include/"'s/^#//' /etc/pacman.conf &&
+    sed -i "/Color/s/^#//" /etc/pacman.conf &&
+    sed -i "/ParallelDownloads/s/^#//" /etc/pacman.conf
+then
+    task_done "Updated pacman.conf"
+else
+    task_failed "Failed to update pacman.conf"
+fi
+
+
+
+# reflector
+if [ -n "$COUNTRY" ]
+then
+    if task "Update pacman.d/mirrorlist" &&
+        reflector --protocol https --country "$COUNTRY" --score 50 --sort rate --save /etc/pacman.d/mirrorlist > /dev/null 2>&1
+    then
+        task_done "Updated pacman.d/mirrorlist"
+    else
+        task_failed "Failed updating pacman.d/mirrorlist"
+    fi
+else
+    if task "Update pacman.d/mirrorlist" &&
+        reflector --protocol https --latest 50 --score 50 --sort rate --save /etc/pacman.d/mirrorlist > /dev/null 2>&1
+    then
+        task_done "Updated pacman.d/mirrorlist"
+    else
+        task_failed "Failed updating pacman.d/mirrorlist"
+    fi
+fi
+
 
 
 
 
 # TODO
-# Keymap and check_internet should be tasked and get cleared
-
-exit 0
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#IP=$(dig +short myip.opendns.com @resolver1.opendns.com)
-#TIMEZONE=$(curl -s ipinfo.io/${IP} | jq .timezone)
-
-
-# get all disks that are not hotplugable (no usb or sd card)
-disks=$(lsblk -o type,path,hotplug | awk '$1 == "disk" && $3 == 0 { print $2 }')
-filesystem='btrfs'
-
-
-
-if [ $( echo "$disks" | wc -l ) -eq "1" ]; then
-    echo "1 -- skip frage"
-    DISK=$disks
-elif [ $( echo "$disks" | wc -l ) -gt "1" ]; then
-    echo "$disks" | awk '{ print NR ") "$s }'
-    read -p "Choose one disk: " input_disk
-    DISK=$( echo "$disks" | sed -n ${input_disk}p )
-else
-    echo "WTF no available disks or all are hotplug" 
-    exit 1
-fi
-
-echo $DISK
-
-# bonus stuff: search if another filesystems or boot /efi is already here. maybe look into fstab
-
-
-# partition disk normal 
-
-
-
-
-
-write "====================  ${Green}Disk Layout${Color_Off}  ====================="
-write "nvme0n1       259:0    0 476.9G  0 disk"                                                              
-write "├─nvme0n1p1   259:1    0   256M  0 part  /mnt/boot/efi"                                                  
-write "├─nvme0n1p2   259:2    0   512M  0 part  /mnt/boot"                                                
-write "└─nvme0n1p3   259:3    0 476.2G  0 part"                                                           
-write "  └─cryptroot 254:0    0 476.2G  0 crypt /mnt/var"                                                
-write "                                         /mnt/.snapshots"                                            
-write "                                         /mnt/home"                                                  
-write "                                         /mnt\n"
-
-read -p "Are these settings and disk layout correct [Y/n]? " yn
-case $yn in
-  [Nn]* ) exit 0;;
-      * ) break;;
-esac
-
-
-# Connecting and checking for network connectivity
-if ! $has_internet; 
+# if wanna use grub and btrfs
+if [ "$CPU" = "AMD" ]
 then
-    	write_rep "${Purple}Setting Internet...${Color_Off}" &&
-    	echo "[Security]" > /var/lib/iwd/$WLAN_SSID.psk &&
-    	wpa_passphrase $WLAN_SSID $WLAN_PASS |grep psk |sed 's/#psk=/Passphrase=/g' \
-        	|sed 's/[[:space:]]//g' |sed 's/psk=/PreSharedKey=/g' >> /var/lib/iwd/$WLAN_SSID.psk && 
-	
-    	iwctl station wlan0 disconnect && iwctl station wlan0 connect $WLAN_SSID > /dev/null 2>&1 && sleep 10
-	
-	if check_internet;
-	then
-        	write "${Green}${CheckMark} Internet connected via iwctl${Color_Off}" && has_internet=true
-	else
-        	write "${Red}${Cross} No Internet - is the ssid or password correct?${Color_Off}" && exit -1
-	fi
-else
-	write "${Green}${CheckMark} Using current Internet connection${Color_Off}"
-fi
-
-
-# Enable the NTP service
-write_rep "${Purple}Enabling NTP service...${Color_Off}" &&
-timedatectl set-ntp true &&
-write "${Green}${CheckMark} Enabled NTP service${Color_Off}"
-
-
-# Disk Setup
-list=$(write "${Purple}Starting disk setup...${Color_Off}" | tee /dev/tty)"\n" &&
-
-## Check is everything dismounted and crypt closed
-DIR=/mnt &&
-if is_mounted $DIR;
+    cpu_pkg="amd-ucode"
+elif [ "$CPU" = "Intel" ]
 then
-    umount -R $DIR &&
-    list+=$(write "${Yellow}├─ ${CheckMark} $DIR is mounted -- unmounted${Color_Off}" | tee /dev/tty)"\n" 
+    cpu_pkg="intel-ucode"
 fi
-CRY_CLOSE=$(dmsetup ls |grep crypt |cut -f1) &&
-if [[ ! -z "$CRY_CLOSE" ]]
+
+if [ "$GPU" = "AMD" ]
 then
-    cryptsetup close /dev/mapper/$CRY_CLOSE &&
-    list+=$(write "${Yellow}├─ ${CheckMark} luks mapper ($CRY_CLOSE) is open -- closed${Color_Off}" | tee /dev/tty)"\n"
+    gpu_pkg="mesa vulkan-radeon"
+elif [ "$GPU" = "Intel" ]
+then
+    gpu_pkg="mesa vulkan-intel"
+elif [ "$GPU" = "Nvidia" ]
+then
+    gpu_pkg="nvidia"
 fi
 
-## Wipe everything
-shred -fvzn 0 /dev/nvme0n1 2>&1 | while read i; do write_rep "$i"; done && O_LINES=1 &&
-list+=$(write "${Green}├─ ${CheckMark} wiped /dev/nvme0n1${Color_Off}" | tee /dev/tty)"\n" && O_LINES=0 &&
 
-## create partitions EFI, BOOT, ROOT
-fdisk /dev/nvme0n1 <<EOF > /dev/null 2>&1 &&
-n
-p
-1
-
-+256M
-
-n
-p
-2
-
-+512M
-
-n
-p
-3
-
-
-
-t
-1
-EF
-
-t
-2
-83
-
-t
-3
-83
-
-w
-EOF
-list+=$(write "${Green}├─ ${CheckMark} Created partitions${Color_Off}" | tee /dev/tty)"\n"
-
-## Create cryptroot
-cryptsetup luksFormat /dev/nvme0n1p3 <<EOF > /dev/null &&
-$CRYPT_PASS
-EOF
-cryptsetup luksOpen /dev/nvme0n1p3 cryptroot <<EOF &&
-$CRYPT_PASS
-EOF
-list+=$(write "${Green}├─ ${CheckMark} created cryptsetup and opened device${Color_Off}" | tee /dev/tty)"\n"
-
-## Creating filesystems and subvolumes
-mkfs.vfat /dev/nvme0n1p1 > /dev/null &&
-mkfs.btrfs /dev/nvme0n1p2 -f > /dev/null &&
-mkfs.btrfs /dev/mapper/cryptroot -f > /dev/null &&
-list+=$(write "${Green}├─ ${CheckMark} created filesystems for partitions${Color_Off}" | tee /dev/tty)"\n"
-
-mount /dev/mapper/cryptroot /mnt &&
-btrfs su cr /mnt/@ > /dev/null &&
-btrfs su cr /mnt/@home > /dev/null &&
-btrfs su cr /mnt/@snapshots > /dev/null &&
-btrfs su cr /mnt/@var > /dev/null &&
-umount /mnt &&
-list+=$(write "${Green}├─ ${CheckMark} created btrfs subvolumes${Color_Off}" | tee /dev/tty)"\n"
-
-## Mount EFI, Boot and subvolumes
-mount -o noatime,compress=zstd,space_cache=v2,discard=async,ssd,subvol=@ /dev/mapper/cryptroot /mnt &&
-mkdir -p /mnt/{home,.snapshots,var,boot} &&
-
-mount -o noatime,compress=zstd,space_cache=v2,discard=async,ssd,subvol=@home /dev/mapper/cryptroot /mnt/home &&
-mount -o noatime,compress=zstd,space_cache=v2,discard=async,ssd,subvol=@snapshots /dev/mapper/cryptroot /mnt/.snapshots &&
-mount -o noatime,compress=zstd,space_cache=v2,discard=async,ssd,subvol=@var /dev/mapper/cryptroot /mnt/var &&
-mount -o noatime,compress=zstd,space_cache=v2,discard=async,ssd /dev/nvme0n1p2 /mnt/boot &&
-
-mkdir -p /mnt/boot/efi &&
-mount /dev/nvme0n1p1 /mnt/boot/efi &&
-list+=$(write "${Green}└─ ${CheckMark} Created mount points${Color_Off}" | tee /dev/tty)
-
-## Setting Task to done.
-O_LINES=$(echo -e "$list" | wc -l) &&
-write "${Green}${CheckMark} Setup Disk${Color_Off}" &&
-O_LINES=0
-
-
-# Configure pacman, set mirrorlist and install needed pkgs
-write_rep "${Purple}Updating pacman.conf...${Color_Off}"
-sed -i "/\[multilib\]/,/Include/"'s/^#//' /etc/pacman.conf &&
-sed -i "/Color/s/^#//" /etc/pacman.conf &&
-sed -i "/ParallelDownloads/s/^#//" /etc/pacman.conf &&
-write "${Green}${CheckMark} Configured /etc/pacman.conf${Color_Off}"
-
-
-# reflector
-write_rep "${Purple}Updating pacman.d/mirrorlist${Color_Off}" &&
-reflector -a 15 --sort rate --save /etc/pacman.d/mirrorlist > /dev/null 2>&1 &&
-write "${Green}${CheckMark} Set fastest mirrors for $COUNTRY${Color_Off}"
-
-
+#TODO output to other tty or just normal output
 # install pkgs via pacstrap
-write_rep "${Purple}Installing basic packages via pacstrap${Color_Off}" &&
-pacstrap /mnt base base-devel linux linux-firmware btrfs-progs vim openssh git dialog jq man intel-ucode grub grub-btrfs efibootmgr networkmanager go &&
-write "${Green}${CheckMark} Installed packages${Color_Off}"
+if task "Install basic packages via pacstrap" &&
+    pacstrap /mnt base base-devel linux linux-firmware vim openssh git dialog jq man \
+            $cpu_pkg $gpu_pkg btrfs-progs grub grub-btrfs efibootmgr networkmanager go
+then
+    echo ''
+    task_done "Installed pacman packages"
+else
+    task_failed "Failed installing pacman packages"
+fi
+
 
 
 # generate fstab
-write_rep "${Purple}Generating fstab...${Color_Off}" &&
-genfstab -U /mnt > /mnt/etc/fstab &&
-write "${Green}${CheckMark} Generated fstab${Color_Off}"
- 
+if task "Generate fstab" &&
+    genfstab -U /mnt > /mnt/etc/fstab
+then
+    task_done "Generated fstab into /mnt/etc/fstab"
+else
+    task_failed "Failed Generating fstab"
+fi
 
-# Timezone
-write_rep "${Purple}Setting timezone to Vienna...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c 'ln -sf /usr/share/zoneinfo/Europe/Vienna /etc/localtime && hwclock --systohc' &&
-write "${Green}${CheckMark} Set timezone to Vienna${Color_Off}"
 
 
 # Locale
-write_rep "${Purple}Generating locales...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c "sed -i '/en_US.UTF-8/s/^#//g' /etc/locale.gen && 
-    locale-gen && 
-    echo 'LANG=en_US.UTF-8' > /etc/locale.conf" > /dev/null 2>&1 &&
-write "${Green}${CheckMark} Generated locales for en_US.UTF-8${Color_Off}"
+if task "Generating locales" &&
+    sed -i "/$LOCALE/s/^#//g" /mnt/etc/locale.gen && 
+    arch-chroot /mnt /bin/bash -c "locale-gen > /dev/null 2>&1" && 
+    echo "LANG=$LOCALE" > /mnt/etc/locale.conf
+then
+    task_done "Generated locale to "
+else
+    task_failed "Failed Generating locale $LOCALE"
+fi
 
 
 # Hostname
-write_rep "${Purple}Setting hostname...${Color_Off}" &&
-echo "arsus" > /mnt/etc/hostname &&
-write "${Green}${CheckMark} Set hostname${Color_Off}"
+if task "Setting hostname $HOST" &&
+    echo "${HOST}" > /mnt/etc/hostname 
+then
+    task_done "Set hostname to $HOST"
+else
+    task_failed "Failed setting hostname $HOST"
+fi
 
 
-# Hosts
-write_rep "${Purple}Setting hosts...${Color_Off}" &&
-echo -e "127.0.0.1  localhost\n::1        localhost\n127.0.1.1  arsus.local  arsus" > /mnt/etc/hosts &&
-write "${Green}${CheckMark} Set hosts${Color_Off}"
+# Hosts 
+if task "Setting hosts" &&
+    printf "127.0.0.1  localhost\n::1        localhost\n127.0.1.1  %s.local  %s\n" "$HOST" "$HOST" > /mnt/etc/hosts 
+then
+    task_done "Set hosts"
+else
+    task_failed "Failed setting hosts"
+fi
 
 
-write "${Purple}Make it bootable...${Color_Off}"
+
 # Start Grub setup
+header "Make it bootable"
+
+
 ## Grub setup
-write_rep "${Purple}├─ Installing grub...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c 'grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB' > /dev/null 2>&1 &&
-write "${Green}├─ ${CheckMark} Installed grub${Color_Off}"
+if task "├─ Installing $BOOTLOADER" &&
+    arch-chroot /mnt /bin/bash -c 'grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB' > /dev/null 2>&1
+then
+    task_done "├─ Installed $BOOTLOADER"
+else
+    task_failed "├─ Failed installing $BOOTLOADER"
+fi
+
+
 
 ## crypt 
-write_rep "${Purple}├─ Configuring and running mkinitcpio...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c "sed -i '/^BINARIES=/ s/()/(btrfs)/i' /etc/mkinitcpio.conf &&
-    sed -i '/^HOOKS=/ s/block filesystems/block encrypt filesystems/i' /etc/mkinitcpio.conf &&
-    mkinitcpio -p linux" > /dev/null 2>&1 &&
-write "${Green}├─ ${CheckMark} Configurated /etc/mkinitcpio.conf${Color_Off}"
+if task "├─ Configuring and running mkinitcpio" &&
+    sed -i '/^BINARIES=/ s/()/(btrfs)/i' /mnt/etc/mkinitcpio.conf &&
+    sed -i '/^HOOKS=/ s/block filesystems/block encrypt filesystems/i' /mnt/etc/mkinitcpio.conf &&
+    arch-chroot /mnt /bin/bash -c "mkinitcpio -p linux > /dev/null 2>&1"
+then
+    task_done "├─ Configured /etc/mkinitcpio.conf and run mkinitcpio"
+else
+    task_failed "├─ Failed Configuring and running mkinitcpio"
+fi
+
+
 
 ## set crypt option in /etc/default/grub
-write_rep "${Purple}├─ Configuring default grub...${Color_Off}" &&
-CRYPT_UUID=$(blkid |tr '\n' ' '  |awk '{ sub(/.*\/dev\/nvme0n1p3: /, ""); sub(/TYPE="crypto_LUKS"*.*/, ""); print }' |tr -d '"' |xargs) &&
-sed -i "s/GRUB_TIMEOUT=5/GRUB_TIMEOUT=3/g" /mnt/etc/default/grub &&
-sed -i "/^GRUB_CMDLINE_LINUX_DEFAULT=/ s/\"loglevel=3 quiet\"/\"loglevel=3 quiet cryptdevice=$CRYPT_UUID:cryptroot root=\/dev\/mapper\/cryptroot\"/i" /mnt/etc/default/grub &&
-write "${Green}├─ ${CheckMark} Configurated /etc/default/grub${Color_Off}"
+if task "├─ Configuring default grub" &&
+    CRYPT_UUID=$( blkid |tr '\n' ' ' | awk "{ sub(/.*\$DISK: /, \"\"); sub(/TYPE=\"crypto_LUKS\"*.*/, \"\"); print }" | tr -d '"' | awk -F ' ' '{print $2}' ) &&
+    sed -i "s/GRUB_TIMEOUT=5/GRUB_TIMEOUT=3/g" /mnt/etc/default/grub &&
+    sed -i "/^GRUB_CMDLINE_LINUX_DEFAULT=/ s/\"loglevel=3 quiet\"/\"loglevel=3 quiet cryptdevice=$CRYPT_UUID:cryptroot root=\/dev\/mapper\/cryptroot\"/i" /mnt/etc/default/grub
+then
+    task_done "├─ Configured default grub /etc/default/grub"
+else
+   task_failed "├─ Failed Configuring grub /etc/default/grub" 
+fi
 
-## generate grub config
-write_rep "${Purple}├─ Generating grub config...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c "grub-mkconfig -o /boot/grub/grub.cfg" > /dev/null 2>&1 &&
-write "${Green}├─ ${CheckMark} Generated grub config${Color_Off}"
+
 
 ## Setup Grub Themes (custom grup)
-write_rep "${Purple}└─ Installing grub2 vimix theme...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c "cd / &&
-    git clone https://github.com/vinceliuice/grub2-themes.git > /dev/null 2>&1 &&
-    cd grub2-themes && 
-    ./install.sh -b -t vimix > /dev/null 2>&1 &&
-    rm -rf /grub2-themes" &&
-write "${Green}└─ ${CheckMark} Installed vimix grub2 theme${Color_Off}"
+if task "├─ Installing grub2 vimix theme" &&
+    arch-chroot /mnt /bin/bash -c "git clone https://github.com/vinceliuice/grub2-themes.git /grub2-themes > /dev/null 2>&1" &&
+    mkdir -p /mnt/boot/grub/themes &&
+    /mnt/grub2-themes/install.sh -t vimix -g /mnt/boot/grub/themes > /dev/null 2>&1  &&
+    rm -rf /mnt/grub2-themes &&
+    sed -i "s|.*GRUB_THEME=.*|GRUB_THEME=\"boot\/grub\/themes\/vimix/theme.txt\"|" /mnt/etc/default/grub &&
+    sed -i "s|.*GRUB_GFXMODE=.*|GRUB_GFXMODE=1920x1080,auto|" /mnt/etc/default/grub
+then
+    task_done "├─ Installed grub2 vimix theme"
+else
+    task_failed "├─ Failed installing grub2 vimix theme"
+fi
 
-O_LINES=5
-write "${Green}${CheckMark} Made it bootable${Color_Off}"
-O_LINES=0
+
+## generate grub config
+if task "└─ Generating grub config" &&
+    arch-chroot /mnt /bin/bash -c "grub-mkconfig -o /boot/grub/grub.cfg" > /dev/null 2>&1 
+then 
+    task_done "└─ Generated grub config"
+else
+    task_failed "└─ Failed Generating grub config"
+fi
 
 
+tasks_done "Made it bootable"
+echo ''
+
+
+
+if [ "$ENVIROMENT" = "none" ]
+then
+    echo "Installed basic Arch."
+    echo ''
+    printf "before rebooting run\n"
+    printf "umount -R /mnt && reboot\n"
+
+    exit 0
+fi
+
+
+
+
+
+
+
+# TODO not setting done or faile
 # update pacman.conf 
-write_rep "${Purple}Updating pacman.conf...${Color_Off}" &&
-sed -i "/\[multilib\]/,/Include/"'s/^#//' /mnt/etc/pacman.conf &&
-sed -i "/Color/s/^#//" /mnt/etc/pacman.conf &&
-sed -i "/ParallelDownloads/s/^#//" /mnt/etc/pacman.conf &&
-write "${Green}${CheckMark} Updated pacman.conf${Color_Off}"
+if task "Updating pacman.conf for the new system" &&
+    sed -i "/\[multilib\]/,/Include/"'s/^#//' /mnt/etc/pacman.conf &&
+    sed -i "/Color/s/^#//" /mnt/etc/pacman.conf &&
+    sed -i "/ParallelDownloads/s/^#//" /mnt/etc/pacman.conf
+then
+    tasks_done "Updated pacman.conf"
+else
+    task_failed "Failed updating pacman.conf"
+fi
+
+
+
+section "DONE pre exit"
+
 
 
 # Install packages
-write "${Purple}Installing packages...${Color_Off}" &&
-pacstrap /mnt mesa vulkan-intel wayland plasma-wayland-session sddm sddm-kcm plasma-desktop plasma-nm iwd powerdevil \
-dolphin dolphin-plugins kdeplasma-addons kdeconnect kde-gtk-config kscreen kinfocenter firefox \
-bluedevil pulseaudio plasma-pa pulseaudio-bluetooth bluez bluez-utils pulseaudio-alsa \
-alsa-firmware alsa-ucm-conf sof-firmware alsa-plugins \
-kitty zsh dash neovim nerd-fonts reflector thunderbird discord btop exa procs ripgrep intellij-idea-community-edition jdk-openjdk neofetch tldr && 
-write "${Green}${CheckMark} Installed GPU drivers, KDE, wayland, audio, bluetooth and standart programms${Color_Off}"
+if [ "$ENVIROMENT" = "KDE" ]
+then
+
+    if task "Installing $ENVIROMENT enviroment" &&
+        pacstrap /mnt wayland plasma-wayland-session sddm sddm-kcm plasma-desktop plasma-nm iwd powerdevil \
+            dolphin dolphin-plugins kdeplasma-addons kdeconnect kde-gtk-config kscreen kinfocenter firefox \
+            bluedevil pulseaudio plasma-pa pulseaudio-bluetooth bluez bluez-utils pulseaudio-alsa \
+            alsa-firmware alsa-ucm-conf sof-firmware alsa-plugins \
+            kitty zsh dash neovim nerd-fonts reflector thunderbird discord btop exa procs ripgrep intellij-idea-community-edition jdk-openjdk neofetch tldr
+    then
+        echo ''
+        tasks_done "Installed $ENVIROMENT packages"
+    else
+        echo ''
+        task_failed "Failed installing $ENVIROMENT packages"
+    fi
+
+elif [ "$ENVIROMENT" = "awesome" ]
+then
+    
+    if task "Installing $ENVIROMENT enviroment" &&
+        pacstrap /mnt awesome picom sxhkd sddm iwd powerdevil \
+            ranger  rofi rofi-calc kdeconnect \
+            neofetch tldr reflector btop exa procs ripgrep \
+            firefox kitty zsh dash neovim  thunderbird discord  \
+            alsa-firmware alsa-ucm-conf sof-firmware pipewire pipewire-alsa pipewire-audio playerctl \
+            bluedevil bluez bluez-utils blueberry
+    then
+        echo ''
+        tasks_done "Installed $ENVIROMENT packages"
+    else
+        echo ''
+        task_failed "Failed installing $ENVIROMENT packages"
+    fi
+
+else
+    task_failed "$ENVIROMENT unknown"
+fi
+    
 
 
 # Setup dash
-write_rep "${Purple}Setting dash as default shell and creating pacman hook...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c "ln -sfT dash /usr/bin/sh && 
+if task "Setting dash as default shell and creating pacman hook" &&
+    arch-chroot /mnt /bin/bash -c "ln -sfT dash /usr/bin/sh" &&
     echo '[Trigger]
 Type = Package
 Operation = Install
@@ -615,155 +953,156 @@ Target = bash
 Description = Re-pointing /bin/sh symlink to dash...
 When = PostTransaction
 Exec = /usr/bin/ln -sfT dash /usr/bin/sh
-Depends = dash' > /usr/share/libalpm/hooks/update-bash.look" &&
-write "${Green}${CheckMark} Set dash as default shell and created pacman hook${Color_Off}"
+Depends = dash' > /mnt/usr/share/libalpm/hooks/update-bash.look
+then
+    tasks_done "Set dash as default shell and created pacman hook"
+else
+    task_failed "Failed setting dash as default shell and creating pacman hook"
+fi
 
 
 # root passwd
-write_rep "${Purple}Setting root pass...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c "echo 'root:$ROOT_PASS' |chpasswd" &&
-write "${Green}${CheckMark} Set root pass${Color_Off}"
+if task "Setting root pass" &&
+    arch-chroot /mnt /bin/bash -c "echo 'root:$ROOT_PASS' |chpasswd"
+then
+    tasks_done "Set root pass"
+else
+    task_failed "Failed setting root pass"
+fi
 
 
 # Useradd and passwd
-write_rep "${Purple}Creating user and setting pass...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c "useradd -mG wheel -s /usr/bin/zsh $USER_NAME && echo '$USER_NAME:$USER_PASS' |chpasswd" &&
-write "${Green}${CheckMark} Created user and set pass${Color_Off}"
+if task "Creating user $USER and setting pass" &&
+    arch-chroot /mnt /bin/bash -c "useradd -mG wheel -s /usr/bin/zsh $USER_NAME && echo '$USER_NAME:$USER_PASS' |chpasswd"
+then
+    tasks_done "Created $USER, set pass and added to wheel"
+else
+    task_failed "Failed creating user $USER"
+fi
 
+
+# works until here ===============================================
 
 # Install yay
 ## uncomment no pass wheel for yay install
-write_rep "${Purple}Activating wheel no passwd...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c "chmod +w /etc/sudoers &&
+if task "Activating wheel no passwd (for further Configuren)" &&
+    arch-chroot /mnt /bin/bash -c "chmod +w /etc/sudoers &&
     sed -i 's/# %wheel ALL=(ALL:ALL) NOPASSWD: ALL/%wheel ALL=(ALL:ALL) NOPASSWD: ALL/g' /etc/sudoers &&
-    chmod 0440 /etc/sudoers" &&
-write "${Green}${CheckMark} Activated wheel nopasswd${Color_Off}"
+    chmod 0440 /etc/sudoers"
+then
+    tasks_done "Activated wheel no passwd (for further config)"
+else
+    task_failed "Failed activating wheel no passwd"
+fi
 
 
 ## install yay as new user
-write "${Purple}Installing yay and aur packages...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c "runuser -l $USER_NAME -c 'git clone https://aur.archlinux.org/yay-git.git ~/yay-git > /dev/null 2>&1 &&
+if task "Installing yay and aur packages" &&
+    arch-chroot /mnt /bin/bash -c "runuser -l $USER_NAME -c 'git clone https://aur.archlinux.org/yay-git.git ~/yay-git > /dev/null 2>&1 &&
     cd ~/yay-git &&
     makepkg -si --noconfirm > /dev/null 2>&1 &&
     rm -rf ~/yay-git &&
-    yay -Syyyu timeshift spotify touchegg tmux wl-clipboard --noconfirm --removemake'" &&
-write "${Green}${CheckMark} Installed yay and aur packages${Color_Off}"
+    yay -Syyyu timeshift touchegg polybar-git ranger_devicons-git nerd-fonts-fira-code ncspot-cover --noconfirm --removemake'" 
+then
+    tasks_done "Installed yay and aur pkgs"
+else
+    task_failed "Failed installing yay and aur pkgs"
+fi
 
 
-# Install and setup Zsh
-write_rep "${Purple}Creating .zshenv...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c "runuser -l $USER_NAME -c 'echo "ZDOTDIR=/home/$USER_NAME/.config/zsh/" > .zshenv'" &&
-write "${Green}${CheckMark} Created .zshenv${Color_Off}"
-
-
+# tries to 
 # install dotfiles
-write_rep "${Purple}Installing dotfiles...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c "runuser -l $USER_NAME -c 'git clone https://github.com/FromWau/dotfiles.git > /dev/null 2>&1 &&
-    cp -r dotfiles/.config/* /home/$USER_NAME/.config &&
-    rm -rf dotfiles'" &&
-write "${Green}${CheckMark} Installed dotfiles${Color_Off}"
+if task "Installing dotfiles" &&
+    arch-chroot /mnt /bin/bash -c "runuser -l $USER_NAME -c 'git clone https://github.com/FromWau/dotfiles.git > /dev/null 2>&1 &&
+    cp -r /home/$USER_NAME/dotfiles/.config/* /home/$USER_NAME/.config &&
+    cp -r /home/$USER_NAME/dotfiles/.zshenv /home/$USER_NAME &&
+    rm -rf /home/$USER_NAME/dotfiles'"
+then
+    tasks_done "Installed dotfiles"
+else
+    task_failed "Failed installing dotfiles"
+fi
 
 
 # setup nvim
-write_rep "${Purple}Setting up neovim...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c "runuser -l $USER_NAME -c 'git clone --depth 1 https://github.com/wbthomason/packer.nvim ~/.local/share/nvim/site/pack/packer/start/packer.nvim > /dev/null 2>&1 &&
-    nvim .config/nvim/lua/user/packer.lua --headless +source +PackerSync +qa > /dev/null 2>&1'" &&
-write "${Red}${Cross} NOT installed nvim packer and plugins for user${Color_Off}"
+if task "Setting up neovim" &&
+    arch-chroot /mnt /bin/bash -c "runuser -l $USER_NAME -c 'nvim .config/nvim/lua/user/packer.lua --headless +source +PackerSync +qa > /dev/null 2>&1'"
+then
+    tasks_done "Setup neovim"
+else
+    task_failed "Failed setting up neovim"
+fi
 
 
-# Set Kde to use German(Austria) keyboad layout
-write_rep "${Purple}Setting KDE keyboard layout to Austria...${Color_Off}" &&
-echo "\n[Layout]\nLayoutList=at\nUse=true" >> /mnt/home/$USER_NAME/.config/kxkbrc &&
-write "${Green}${CheckMark} Set KDE keyboard layout to Austria${Color_Off}"
-
-
-# set keymap
-write_rep "${Purple}Setting timezone to Vienna...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c "echo 'KEYMAP=de-latin1' > /etc/vconsole.conf" &&
-write "${Green}${CheckMark} Set keymap for new system${Color_Off}"
-
-
-# Setup tmux
-write_rep "${Purple}Setting up tmux...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c "runuser -l $USER_NAME -c 'if [[ ! -d ~/.config/tmux ]] &&
-    then
-	    mkdir -p .config/tmux &&
-	    git clone https://github.com/gpakosz/.tmux.git ~/.tmux > /dev/null 2>&1 &&
-	    mv .tmux/.tmux.conf .config/tmux/tmux.conf &&
-	    mv .tmux/.tmux.conf.local .config/tmux/tmux.conf.local &&
-	    rm -rf .tmux
-    fi
-    ln -sf .config/tmux/tmux.conf ~/.tmux.conf &&
-    ln -sf .config/tmux/tmux.conf.local .tmux.conf.local &&
-    echo -e \"# if run as <tmux attach>, create a session if one does not exist\nnew-session -n $HOST\" >> .config/tmux/tmux.conf.local'" &&
-write "${Green}${CheckMark} Setup tmux${Color_Off}" &&
-
-
-# update kcminputrc -- kcminputrc not existing 
-write_rep "${Purple}Set KDE inputrc...${Color_Off}" &&
-#arch-chroot /mnt /bin/bash -c "runuser -l $USER_NAME -c \"sed -i 's/TapToClick=false/TapToClick=true/g' ~/.config/kcminputrc &&
-#    sed -i 's/NaturalScroll=false/NaturalScroll=true/g' ~/.config/kcminputrc\"" &&
-write "${Red}${Cross} NO KDE inputrc${Color_Off}"
-
-
-write_rep "${Purple}Creating KDE shortcuts...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c "runuser -l $USER_NAME -c 'echo -e \"[kitty-3.desktop]\n_k_friendly_name=kitty tmux attach\n_launch=Meta+Return,none,kitty tmux attac\" >> ~/.config/kglobalshortcutsrc'" &&
-write "${Green}${CheckMark} Created KDE shortcut${Color_Off}"
-
-
+# playerctl service not found
 # Enable Services
-write_rep "${Purple}Enabling systemd services...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c "systemctl enable NetworkManager --quiet &&
+if task "Enabling systemd services" &&
+    arch-chroot /mnt /bin/bash -c "systemctl enable NetworkManager --quiet &&
     systemctl enable sshd.service --quiet &&
     systemctl enable sddm.service --quiet &&
     systemctl enable cronie.service --quiet &&
     systemctl enable bluetooth.service --quiet &&
-    systemctl enable upower.service --quiet" &&
-write "${Green}${CheckMark} Enabled systemd services${Color_Off}"
+    systemctl enable upower.service --quiet &&
+    systemctl --user enable playerctld.service --quiet"
+then
+    tasks_done "Enabled systemd services"
+else
+    task_failed "Failed Enabling services"
+fi
+
 
 
 # enable experimental bluetooth features to be able to see the bluetooth headset battery
-write_rep "${Purple}Updating bluetooth.service...${Color_Off}" &&
-sed -i "s/ExecStart\=\/usr\/lib\/bluetooth\/bluetoothd/ExecStart\=\/usr\/lib\/bluetooth\/bluetoothd --experimental/g" /mnt/usr/lib/systemd/system/bluetooth.service &&
-write "${Green}${CheckMark} Updated bluetooth.service to use experimental features, because headset battery${Color_Off}"
+if task "Updating bluetooth.service" &&
+    sed -i "s/ExecStart\=\/usr\/lib\/bluetooth\/bluetoothd/ExecStart\=\/usr\/lib\/bluetooth\/bluetoothd --experimental/g" /mnt/usr/lib/systemd/system/bluetooth.service
+then
+    tasks_done "Set experimental bluetoothd"
+else
+    task_failed "Failed setting bluetoothd experimental"
+fi
+
 
 
 # setup NetworkManager use iwd as backend and copy already setup networks
-write_rep "${Purple}Setting NetworkManager backend to iwd and copy known psk files...${Color_Off}" &&
-echo -e "[device]\nwifi.backend=iwd" > /mnt/etc/NetworkManager/conf.d/wifi_backend.conf && 
-mkdir -p /mnt/var/lib/iwd/ &&
-cp -r /var/lib/iwd/* /mnt/var/lib/iwd/ &&
-write "${Green}${CheckMark} Updated NetworkManager and copied known psk files${Color_Off}"
+if task "Setting NetworkManager backend to iwd and copy known psk files" &&
+    printf "[device]\nwifi.backend=iwd" > /mnt/etc/NetworkManager/conf.d/wifi_backend.conf && 
+    mkdir -p /mnt/var/lib/iwd/ &&
+    cp -r /var/lib/iwd/* /mnt/var/lib/iwd/ 
+then
+    tasks_done "Set iwd as NetworkManager backend and copied already known networks over"
+else
+    task_failed "Failed setting iwd as NetworkManager backend"
+fi
 
-
-# Set SDDM keyboard layout to de
-write_rep "${Purple}Setting SDDM keyboard layout to german...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c "localectl set-x11-keymap de" &&
-write "${Green}${CheckMark} Set SDDM keyboard layout to german${Color_Off}"
 
 
 # enable wheel properly
-write_rep "${Purple}Activating wheel group and deactivating wheel nopasswd...${Color_Off}" &&
-arch-chroot /mnt /bin/bash -c "chmod +w /etc/sudoers &&
+if task "Activating wheel group and deactivating wheel nopasswd" &&
+    arch-chroot /mnt /bin/bash -c "chmod +w /etc/sudoers &&
     sed -i 's/%wheel ALL=(ALL:ALL) NOPASSWD: ALL/# %wheel ALL=(ALL:ALL) NOPASSWD: ALL/g' /etc/sudoers &&
     sed -i 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/g' /etc/sudoers &&
-    chmod 0440 /etc/sudoers" &&
-write "${Green}Activated wheel group and deactivated wheel nopasswd${Color_Off}"
-
-echo -e "POST Install Summary"
-echo -e "\n${Yellow}====== Things that dont work or should be checked ======= 
-keyboard layout not de 
-kde setup
-
-${Red}
-====== Errors =====================
-====================================
-
-${Yellow}
-when done run:
-
-umount -R /mnt && reboot
-${Color_Off}"
+    chmod 0440 /etc/sudoers"
+then
+    tasks_done "Activated wheel group and deactivated wheel no passwd"
+else
+    task_failed "Failed activating wheel and deactivating wheel no passed"
+fi
 
 
+
+# done
+section "POST Install Summary"
+section "(Things that dont work or should be checked)" " "
+
+section "Errors" "-"
+printf "grub2 vimix not working"
+
+echo ''
+section "before rebooting"
+printf "run\numount -R /mnt && reboot"
+
+
+
+
+# Check until here ==================================
 
