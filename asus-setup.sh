@@ -740,7 +740,7 @@ fi
 # install pkgs via pacstrap
 if task "Install basic packages via pacstrap" &&
     pacstrap /mnt base base-devel linux linux-firmware vim openssh git dialog jq man \
-            $cpu_pkg $gpu_pkg btrfs-progs grub grub-btrfs efibootmgr networkmanager go
+            $cpu_pkg $gpu_pkg btrfs-progs grub grub-btrfs efibootmgr networkmanager go ttf-firacode-nerd
 then
     echo 
     task_done "Installed pacman packages"
@@ -906,7 +906,7 @@ then
             dolphin dolphin-plugins kdeplasma-addons kdeconnect kde-gtk-config kscreen kinfocenter firefox \
             bluedevil pulseaudio plasma-pa pulseaudio-bluetooth bluez bluez-utils pulseaudio-alsa \
             alsa-firmware alsa-ucm-conf sof-firmware alsa-plugins \
-            kitty zsh dash neovim nerd-fonts reflector thunderbird discord btop exa procs ripgrep intellij-idea-community-edition jdk-openjdk neofetch tldr
+            kitty zsh dash neovim reflector thunderbird discord btop exa procs ripgrep intellij-idea-community-edition jdk-openjdk neofetch tldr
     then
         echo
         task_done "Installed $ENVIROMENT packages"
@@ -1004,7 +1004,7 @@ if task "Installing yay and aur packages" &&
     cd ~/yay-git &&
     makepkg -si --noconfirm > /dev/null 2>&1 &&
     rm -rf ~/yay-git &&
-    yay -Syyyu timeshift touchegg polybar-git ranger_devicons-git nerd-fonts-fira-code ncspot-cover awesome-git --noconfirm --removemake'" 
+    yay -Syyyu timeshift touchegg polybar-git ranger_devicons-git ncspot-cover awesome-git --noconfirm --removemake'" 
 then
     echo
     task_done "Installed yay and aur pkgs"
