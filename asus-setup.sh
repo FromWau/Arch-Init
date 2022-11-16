@@ -1004,7 +1004,7 @@ if task "Installing yay and aur packages" &&
     cd ~/yay-git &&
     makepkg -si --noconfirm > /dev/null 2>&1 &&
     rm -rf ~/yay-git &&
-    yay -Syyyu timeshift touchegg polybar-git ranger_devicons-git ncspot-cover awesome-git --noconfirm --removemake'" 
+    yay -Syyyu timeshift-bin polybar-git ranger_devicons-git ncspot-cover awesome-git --noconfirm --removemake --rebuild'" 
 then
     echo
     task_done "Installed yay and aur pkgs"
