@@ -13,7 +13,7 @@ Color_Off='\033[0m'	    # Resets colors
 # Symbols
 CheckMark='✔'
 Cross='✗'
-Star=''
+Arrow=''
 
 # ======================
 # Functions
@@ -114,7 +114,8 @@ new_keyboardlayout() {
 
 
 
-# not accepting coorect answer
+# TODO
+# not accepting correct answer
 new_timezone() {
     printf "Change timezone [N (use current %s)/ ? (list timezones)/ timezone]: " "$TIMEZONE"
     read -r new_tz
@@ -173,7 +174,7 @@ line_cleaner() {
 # text that gets overwritten
 task() {
     task_count=$((task_count+1)) &&
-    printf "${Purple}${Star} %s${Color_Off}\n" "$1" &&
+    printf "${Purple}${Arrow} %s${Color_Off}\n" "$1" &&
     case "$3" in
         '-1')
             eval " $2" 2>&1 | one_line_printf
@@ -220,7 +221,7 @@ tasks_done() {
 }
 
 header() {
-    printf "${Purple}${Star} %s${Color_Off}\n" "$1"
+    printf "${Purple}${Arrow} %s${Color_Off}\n" "$1"
     task_count=1
 }
 
@@ -490,7 +491,7 @@ else
     
     printf "NOT yet implemented/n"
 fi
-echo ''
+echo
 
 printf "Everything correct and ready to go? [Y/n] "
 read -r input
@@ -500,7 +501,7 @@ case $input in
 esac
 
 
-echo ''
+echo
 section "Lets go"
 
 
@@ -547,9 +548,9 @@ then
     then
         if task_warning "├─ $DIR is mounted! -- trying unmounting" "umount -R $DIR"
         then
-            task_done "├─ unmounted $DIR"
+            task_done "├─ Unmounted $DIR"
         else
-            task_failed "├─ failed unmounting $DIR "
+            task_failed "├─ Failed unmounting $DIR "
         fi
     fi
 
@@ -557,11 +558,11 @@ then
     CRY_CLOSE=$(dmsetup ls |grep crypt |cut -f1)
     if [ -n "$CRY_CLOSE" ]
     then
-        if task_warning "├─ luks mapper ($CRY_CLOSE) is open -- trying closing" "cryptsetup close /dev/mapper/$CRY_CLOSE"
+        if task_warning "├─ Luks mapper ($CRY_CLOSE) is open -- trying closing" "cryptsetup close /dev/mapper/$CRY_CLOSE"
         then
-            task_done "├─ closed $CRY_CLOSE"
+            task_done "├─ Closed $CRY_CLOSE"
         else
-            task_failed "├─ failed closing $CRY_CLOSE"
+            task_failed "├─ Failed closing $CRY_CLOSE"
         fi
     fi
 
@@ -571,7 +572,7 @@ then
     then
         task_done "├─ Wiped $DISK"
     else
-        task_failed "├─ failed wiping $DISK"
+        task_failed "├─ Failed wiping $DISK"
     fi
 
 
@@ -741,9 +742,10 @@ if task "Install basic packages via pacstrap" &&
     pacstrap /mnt base base-devel linux linux-firmware vim openssh git dialog jq man \
             $cpu_pkg $gpu_pkg btrfs-progs grub grub-btrfs efibootmgr networkmanager go
 then
-    echo ''
+    echo 
     task_done "Installed pacman packages"
 else
+    echo 
     task_failed "Failed installing pacman packages"
 fi
 
@@ -766,7 +768,7 @@ if task "Generating locales" &&
     arch-chroot /mnt /bin/bash -c "locale-gen > /dev/null 2>&1" && 
     echo "LANG=$LOCALE" > /mnt/etc/locale.conf
 then
-    task_done "Generated locale to "
+    task_done "Generated locale to $LOCALE"
 else
     task_failed "Failed Generating locale $LOCALE"
 fi
@@ -808,16 +810,19 @@ fi
 
 
 
+
 ## crypt 
 if task "├─ Configuring and running mkinitcpio" &&
     sed -i '/^BINARIES=/ s/()/(btrfs)/i' /mnt/etc/mkinitcpio.conf &&
-    sed -i '/^HOOKS=/ s/block filesystems/block encrypt filesystems/i' /mnt/etc/mkinitcpio.conf &&
+    sed -i '/^HOOKS=/ s/autodetect modconf block filesystems keyboard/btrfs autodetect modconf block keyboard keymap encrypt filesystems/i' /mnt/etc/mkinitcpio.conf &&
     arch-chroot /mnt /bin/bash -c "mkinitcpio -p linux > /dev/null 2>&1"
 then
     task_done "├─ Configured /etc/mkinitcpio.conf and run mkinitcpio"
 else
     task_failed "├─ Failed Configuring and running mkinitcpio"
 fi
+
+
 
 
 
@@ -860,22 +865,17 @@ fi
 
 
 tasks_done "Made it bootable"
-echo ''
-
 
 
 if [ "$ENVIROMENT" = "none" ]
 then
     echo "Installed basic Arch."
-    echo ''
+    echo
     printf "before rebooting run\n"
     printf "umount -R /mnt && reboot\n"
 
     exit 0
 fi
-
-
-
 
 
 
@@ -887,14 +887,13 @@ if task "Updating pacman.conf for the new system" &&
     sed -i "/Color/s/^#//" /mnt/etc/pacman.conf &&
     sed -i "/ParallelDownloads/s/^#//" /mnt/etc/pacman.conf
 then
-    tasks_done "Updated pacman.conf"
+    task_done "Updated pacman.conf"
 else
     task_failed "Failed updating pacman.conf"
 fi
 
 
 
-section "DONE pre exit"
 
 
 
@@ -909,10 +908,10 @@ then
             alsa-firmware alsa-ucm-conf sof-firmware alsa-plugins \
             kitty zsh dash neovim nerd-fonts reflector thunderbird discord btop exa procs ripgrep intellij-idea-community-edition jdk-openjdk neofetch tldr
     then
-        echo ''
-        tasks_done "Installed $ENVIROMENT packages"
+        echo
+        task_done "Installed $ENVIROMENT packages"
     else
-        echo ''
+        echo
         task_failed "Failed installing $ENVIROMENT packages"
     fi
 
@@ -920,17 +919,17 @@ elif [ "$ENVIROMENT" = "awesome" ]
 then
     
     if task "Installing $ENVIROMENT enviroment" &&
-        pacstrap /mnt awesome picom sxhkd sddm iwd powerdevil \
+        pacstrap /mnt picom sxhkd sddm iwd powerdevil \
             ranger  rofi rofi-calc kdeconnect \
             neofetch tldr reflector btop exa procs ripgrep \
             firefox kitty zsh dash neovim  thunderbird discord  \
             alsa-firmware alsa-ucm-conf sof-firmware pipewire pipewire-alsa pipewire-audio playerctl \
             bluedevil bluez bluez-utils blueberry
     then
-        echo ''
-        tasks_done "Installed $ENVIROMENT packages"
+        echo
+        task_done "Installed $ENVIROMENT packages"
     else
-        echo ''
+        echo
         task_failed "Failed installing $ENVIROMENT packages"
     fi
 
@@ -955,7 +954,7 @@ When = PostTransaction
 Exec = /usr/bin/ln -sfT dash /usr/bin/sh
 Depends = dash' > /mnt/usr/share/libalpm/hooks/update-bash.look
 then
-    tasks_done "Set dash as default shell and created pacman hook"
+    task_done "Set dash as default shell and created pacman hook"
 else
     task_failed "Failed setting dash as default shell and creating pacman hook"
 fi
@@ -965,19 +964,19 @@ fi
 if task "Setting root pass" &&
     arch-chroot /mnt /bin/bash -c "echo 'root:$ROOT_PASS' |chpasswd"
 then
-    tasks_done "Set root pass"
+    task_done "Set root pass"
 else
     task_failed "Failed setting root pass"
 fi
 
 
 # Useradd and passwd
-if task "Creating user $USER and setting pass" &&
-    arch-chroot /mnt /bin/bash -c "useradd -mG wheel -s /usr/bin/zsh $USER_NAME && echo '$USER_NAME:$USER_PASS' |chpasswd"
+if task "Creating user $USER_NAME and setting pass" &&
+    arch-chroot /mnt /bin/bash -c "useradd -mG wheel -s /usr/bin/zsh $USER_NAME && echo '$USER_NAME:$USER_PASS' | chpasswd"
 then
-    tasks_done "Created $USER, set pass and added to wheel"
+    task_done "Created $USER_NAME, set pass and added to wheel"
 else
-    task_failed "Failed creating user $USER"
+    task_failed "Failed creating user $USER_NAME"
 fi
 
 
@@ -985,16 +984,19 @@ fi
 
 # Install yay
 ## uncomment no pass wheel for yay install
-if task "Activating wheel no passwd (for further Configuren)" &&
+if task "Activating wheel no passwd (for further user configuration)" &&
     arch-chroot /mnt /bin/bash -c "chmod +w /etc/sudoers &&
     sed -i 's/# %wheel ALL=(ALL:ALL) NOPASSWD: ALL/%wheel ALL=(ALL:ALL) NOPASSWD: ALL/g' /etc/sudoers &&
     chmod 0440 /etc/sudoers"
 then
-    tasks_done "Activated wheel no passwd (for further config)"
+    task_done "Activated wheel no passwd (for further config)"
 else
     task_failed "Failed activating wheel no passwd"
 fi
 
+
+# TODO
+# has Touchpad install touchegg
 
 ## install yay as new user
 if task "Installing yay and aur packages" &&
@@ -1002,39 +1004,56 @@ if task "Installing yay and aur packages" &&
     cd ~/yay-git &&
     makepkg -si --noconfirm > /dev/null 2>&1 &&
     rm -rf ~/yay-git &&
-    yay -Syyyu timeshift touchegg polybar-git ranger_devicons-git nerd-fonts-fira-code ncspot-cover --noconfirm --removemake'" 
+    yay -Syyyu timeshift touchegg polybar-git ranger_devicons-git nerd-fonts-fira-code ncspot-cover awesome-git --noconfirm --removemake'" 
 then
-    tasks_done "Installed yay and aur pkgs"
+    echo
+    task_done "Installed yay and aur pkgs"
 else
     task_failed "Failed installing yay and aur pkgs"
 fi
 
 
-# tries to 
 # install dotfiles
 if task "Installing dotfiles" &&
-    arch-chroot /mnt /bin/bash -c "runuser -l $USER_NAME -c 'git clone https://github.com/FromWau/dotfiles.git > /dev/null 2>&1 &&
-    cp -r /home/$USER_NAME/dotfiles/.config/* /home/$USER_NAME/.config &&
-    cp -r /home/$USER_NAME/dotfiles/.zshenv /home/$USER_NAME &&
-    rm -rf /home/$USER_NAME/dotfiles'"
+    arch-chroot /mnt /bin/bash -c "git clone https://github.com/FromWau/dotfiles.git > /dev/null 2>&1" 
+    cp -r /mnt/dotfiles/.zshenv /mnt/home/"$USER_NAME" &&
+    cp -r /mnt/dotfiles/.config /mnt/home/"$USER_NAME"
 then
-    tasks_done "Installed dotfiles"
+    task_done "Installed dotfiles"
 else
     task_failed "Failed installing dotfiles"
 fi
 
 
-# setup nvim
-if task "Setting up neovim" &&
-    arch-chroot /mnt /bin/bash -c "runuser -l $USER_NAME -c 'nvim .config/nvim/lua/user/packer.lua --headless +source +PackerSync +qa > /dev/null 2>&1'"
+
+# create playerctld.service
+if task "Create playerctld.service" &&
+    echo "[Unit]
+Description=Keep track of media player activity
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/playerctld daemon
+
+[Install]
+WantedBy=default.target" > /mnt/usr/lib/systemd/user/playerctld.service
 then
-    tasks_done "Setup neovim"
+    task_done "Created /usr/lib/systemd/user/playerctld.service"
 else
-    task_failed "Failed setting up neovim"
+    task_failed "Failed creating /usr/lib/systemd/user/playerctld.service"
 fi
 
 
-# playerctl service not found
+# enable experimental bluetooth features to be able to see the bluetooth headset battery
+if task "Updating bluetooth.service" &&
+    sed -i "s/ExecStart\=\/usr\/lib\/bluetooth\/bluetoothd/ExecStart\=\/usr\/lib\/bluetooth\/bluetoothd --experimental/g" /mnt/usr/lib/systemd/system/bluetooth.service
+then
+    task_done "Set experimental bluetoothd"
+else
+    task_failed "Failed setting bluetoothd experimental"
+fi
+
+
 # Enable Services
 if task "Enabling systemd services" &&
     arch-chroot /mnt /bin/bash -c "systemctl enable NetworkManager --quiet &&
@@ -1042,24 +1061,14 @@ if task "Enabling systemd services" &&
     systemctl enable sddm.service --quiet &&
     systemctl enable cronie.service --quiet &&
     systemctl enable bluetooth.service --quiet &&
-    systemctl enable upower.service --quiet &&
+    systemctl enable upower.service --quiet
     systemctl --user enable playerctld.service --quiet"
 then
-    tasks_done "Enabled systemd services"
+    task_done "Enabled systemd services"
 else
     task_failed "Failed Enabling services"
 fi
 
-
-
-# enable experimental bluetooth features to be able to see the bluetooth headset battery
-if task "Updating bluetooth.service" &&
-    sed -i "s/ExecStart\=\/usr\/lib\/bluetooth\/bluetoothd/ExecStart\=\/usr\/lib\/bluetooth\/bluetoothd --experimental/g" /mnt/usr/lib/systemd/system/bluetooth.service
-then
-    tasks_done "Set experimental bluetoothd"
-else
-    task_failed "Failed setting bluetoothd experimental"
-fi
 
 
 
@@ -1069,10 +1078,11 @@ if task "Setting NetworkManager backend to iwd and copy known psk files" &&
     mkdir -p /mnt/var/lib/iwd/ &&
     cp -r /var/lib/iwd/* /mnt/var/lib/iwd/ 
 then
-    tasks_done "Set iwd as NetworkManager backend and copied already known networks over"
+    task_done "Set iwd as NetworkManager backend and copied already known networks over"
 else
     task_failed "Failed setting iwd as NetworkManager backend"
 fi
+
 
 
 
@@ -1083,26 +1093,58 @@ if task "Activating wheel group and deactivating wheel nopasswd" &&
     sed -i 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/g' /etc/sudoers &&
     chmod 0440 /etc/sudoers"
 then
-    tasks_done "Activated wheel group and deactivated wheel no passwd"
+    task_done "Activated wheel group and deactivated wheel no passwd"
 else
     task_failed "Failed activating wheel and deactivating wheel no passed"
 fi
 
 
+# create vconsole
+if task "Setting keyboad layout $KEYLAYOUT for new system"
+    echo "KEYMAP=$KEYLAYOUT" > /mnt/etc/vconsole.conf
+then
+    task_done "Set keyboad layout $KEYLAYOUT for new system (x11)"
+else
+    task_failed "Failed setting $KEYLAYOUT to new keyboad layout (x11)"
+fi
 
-# done
+
+
+# setup nvim
+if task "Setting up neovim" &&
+    arch-chroot /mnt /bin/bash -c "runuser -l $USER_NAME -c 'nvim --headless +source +PackerSync +qa > /dev/null 2>&1'"
+then
+    task_done "Setup neovim"
+else
+    task_failed "Failed setting up neovim"
+fi
+
+
+# clean home (remove cargo)
+if task "Clean up /home/$USER_NAME" &&
+    rm -rf /mnt/home/"$USER_NAME"/.cargo
+then
+    task_done "Cleaned up /home/$USER_NAME"
+else
+    task_failed "Failed cleaning up /home/$USER_NAME"
+fi
+
+
+
+echo 
 section "POST Install Summary"
-section "(Things that dont work or should be checked)" " "
+echo 'for changing the keymap use:'
+echo 'localectl set-x11-keymap de'
 
-section "Errors" "-"
-printf "grub2 vimix not working"
-
-echo ''
+echo
 section "before rebooting"
-printf "run\numount -R /mnt && reboot"
-
+echo "run:"
+echo "umount -R /mnt && reboot"
 
 
 
 # Check until here ==================================
+
+
+
 
